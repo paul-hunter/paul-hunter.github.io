@@ -105,6 +105,7 @@
         let userMap = {};
         let rosterMap = {};
         let leagueMap = {};
+        let draftMap = {};
 
         const seasonSelect = document.getElementById('seasonSelect');
         const ownerSelect = document.getElementById('ownerSelect');
@@ -147,6 +148,13 @@
                     };
                 });
 
+                // Fetch trades from all leagues
+                allTrades = await getAllTrades(leagueMap);
+
+                // Build rosterDraftsMap for all seasons
+                draftMap = await buildDraftMap(leagueMap);
+                console.log(draftMap);
+
                 // Show filters and populate
                 const filtersContainer = document.getElementById('filters-container');
                 filtersContainer.style.display = 'flex';
@@ -164,9 +172,6 @@
                 Object.values(rosterMap).forEach(r => {
                     ownerSelect.innerHTML += `<option value="${r.displayName}">${r.teamName} (${r.displayName})</option>`;
                 });
-
-                // Fetch trades from all leagues
-                allTrades = await getAllTrades(leagueMap);
 
                 // Initial render
                 renderTrades();
@@ -224,9 +229,32 @@
                 // Draft picks
                 draftPicks.forEach(dp => {
                     const receiver = dp.owner_id;
-                    const label = `Pick ${dp.season} Round ${dp.round} (${rosterMap[dp.roster_id]?.displayName || "Unknown"})`;
+                    const season = dp.season;
+                    const round = dp.round;
+                    const originalRosterId = dp.roster_id;
+                    const teamName = rosterMap[originalRosterId]?.teamName || "Unknown";
+                    const userName = rosterMap[originalRosterId]?.displayName || "Unknown";
+
+                    let playerName = "Unknown";
+                    let pickNumber = dp.pick_no || "";
+                    
+                    let label = `Pick ${season} Round ${round} (${teamName})`;
+
+                    // Look up in draftMap
+                    if (
+                        draftMap[season] &&
+                        draftMap[season][round] &&
+                        draftMap[season][round][originalRosterId]
+                    ) {
+                        const pickInfo = draftMap[season][round][originalRosterId];
+                        console.log(pickInfo);
+                        playerName = pickInfo.player_name;
+                        pickNumber = pickInfo.round + "." + pickInfo.draft_slot;
+                        label = label + ` -> became the ${pickNumber} which became <em>${playerName}</em>`;
+                    }
+
                     grouped[receiver] = grouped[receiver] || [];
-                    grouped[receiver].push(`received <em>${label}</em>`);
+                    grouped[receiver].push(label);
                 });
 
                 // FAAB
@@ -268,6 +296,49 @@
                     }
                 });
             });
+        }
+
+        /**
+         * Builds a complete draft map: season -> round -> roster_id -> { pick, player_id, player_name }
+         */
+        async function buildDraftMap(leagueMap) {
+            const draftMap = {};
+
+            for (const [season, leagueId] of Object.entries(leagueMap)) {
+                try {
+                    // Fetch all drafts for the league
+                    const drafts = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/drafts`).then(r => r.json());
+                    if (!drafts || drafts.length === 0) continue;
+
+                    // Assume first draft is the main draft for season
+                    const draft = await fetch(`https://api.sleeper.app/v1/draft/${drafts[0].draft_id}`).then(r => r.json());
+                    const slotToRoster = draft.slot_to_roster_id || {};
+
+                    // Fetch picks for this draft
+                    const picks = await fetch(`https://api.sleeper.app/v1/draft/${draft.draft_id}/picks`).then(r => r.json());
+
+                    draftMap[season] = {};
+
+                    picks.forEach(pick => {
+                        const round = pick.round;
+                        const rosterId = slotToRoster[pick.draft_slot];
+
+                        if (!draftMap[season][round]) draftMap[season][round] = {};
+
+                        draftMap[season][round][rosterId] = {
+                            absolute_pick: pick.pick_no, // absolute pick number
+                            round: round,
+                            draft_slot: pick.draft_slot,
+                            player_id: pick.player_id,
+                            player_name: pick.metadata?.first_name + ' ' + pick.metadata?.last_name
+                        };
+                    });
+                } catch (err) {
+                    console.warn(`Failed to fetch draft data for league ${leagueId} season ${season}`, err);
+                }
+            }
+
+            return draftMap;
         }
 
         async function getAllTrades(leagueMap) {
