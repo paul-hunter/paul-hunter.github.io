@@ -25,7 +25,8 @@
         }
 
         input,
-        button {
+        button,
+        select {
             padding: 10px;
             font-size: 1rem;
         }
@@ -56,6 +57,26 @@
             padding-left: 10px;
             border-left: 3px solid #4a90e2;
         }
+
+        .toggle-json {
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+
+        pre {
+            background: #eef;
+            padding: 10px;
+            border-radius: 6px;
+            overflow: auto;
+        }
+
+        #filters-container {
+            display: none;
+            /* initially hidden */
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 
@@ -80,12 +101,16 @@
 
     <script src="players.js"></script>
     <script>
-        var allTrades = [];
-        var userMap = {};
-        var rosterMap = {};
-        var leagueMap = {};
-        seasonSelect.addEventListener('change', () => renderTrades());
-        ownerSelect.addEventListener('change', () => renderTrades());
+        let allTrades = [];
+        let userMap = {};
+        let rosterMap = {};
+        let leagueMap = {};
+
+        const seasonSelect = document.getElementById('seasonSelect');
+        const ownerSelect = document.getElementById('ownerSelect');
+
+        seasonSelect.addEventListener('change', renderTrades);
+        ownerSelect.addEventListener('change', renderTrades);
 
         async function loadTrades() {
             const leagueId = document.getElementById('leagueId').value.trim();
@@ -95,12 +120,14 @@
             resultsEl.innerHTML = 'Loading...';
 
             try {
-                // TODO separte user/rosters fetch
+                // Fetch users and rosters
                 const users = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then(r => r.json());
                 const rosters = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then(r => r.json());
-                leagueMap = await getAllLeagueIds(leagueId); // { season -> leagueId }
 
-                // Step 1: Map user_id -> { display_name, team_name }
+                // Get all league IDs (past seasons)
+                leagueMap = await getAllLeagueIds(leagueId);
+
+                // Map user_id -> { displayName, teamName }
                 userMap = {};
                 users.forEach(user => {
                     userMap[user.user_id] = {
@@ -109,11 +136,10 @@
                     };
                 });
 
-                // Step 2: Map roster_id -> { displayName, teamName }
+                // Map roster_id -> { displayName, teamName }
                 rosterMap = {};
                 rosters.forEach(roster => {
-                    // Usually, rosters have one owner, sometimes co_owners
-                    const ownerId = roster.owner_id; // you could handle co_owners if needed
+                    const ownerId = roster.owner_id;
                     const userInfo = userMap[ownerId];
                     rosterMap[roster.roster_id] = {
                         displayName: userInfo?.displayName || 'Unknown',
@@ -121,28 +147,28 @@
                     };
                 });
 
-                // Show the filters container
+                // Show filters and populate
                 const filtersContainer = document.getElementById('filters-container');
                 filtersContainer.style.display = 'flex';
                 filtersContainer.style.gap = '10px';
                 filtersContainer.style.marginBottom = '20px';
 
                 // Populate season dropdown
-                const seasonSelect = document.getElementById('seasonSelect');
                 seasonSelect.innerHTML = '<option value="">All Seasons</option>';
                 for (const season of Object.keys(leagueMap).sort((a, b) => b - a)) {
                     seasonSelect.innerHTML += `<option value="${season}">${season}</option>`;
                 }
 
                 // Populate owner dropdown
-                const ownerSelect = document.getElementById('ownerSelect');
                 ownerSelect.innerHTML = '<option value="">All Owners</option>';
                 Object.values(rosterMap).forEach(r => {
                     ownerSelect.innerHTML += `<option value="${r.displayName}">${r.teamName} (${r.displayName})</option>`;
                 });
 
+                // Fetch trades from all leagues
                 allTrades = await getAllTrades(leagueMap);
 
+                // Initial render
                 renderTrades();
             } catch (err) {
                 console.error(err);
@@ -154,9 +180,8 @@
             const resultsEl = document.getElementById('results');
             resultsEl.innerHTML = ''; // clear previous
 
-            // Apply filters
-            const selectedSeason = document.getElementById('seasonSelect').value;
-            const selectedOwner = document.getElementById('ownerSelect').value;
+            const selectedSeason = seasonSelect.value;
+            const selectedOwner = ownerSelect.value;
 
             let filteredTrades = allTrades;
 
@@ -182,15 +207,17 @@
             filteredTrades.forEach((t, i) => {
                 html += `<div class="trade-card">`;
                 html += `<h3>Trade #${i + 1} - Season ${t.season}</h3>`;
-                html += `<pre style="background:#eef;padding:10px;border-radius:6px;overflow:auto;">${JSON.stringify(t, null, 2)}</pre>`;
+
+                // Toggle button
+                html += `<button class="toggle-json" data-index="${i}">Show JSON</button>`;
+                html += `<pre id="json-${i}" style="display:none;">${JSON.stringify(t, null, 2)}</pre>`;
 
                 const adds = t.adds || {};
                 const draftPicks = t.draft_picks || [];
                 const waivers = t.waiver_budget || [];
-
                 const grouped = {};
 
-                // Add players
+                // Players
                 Object.entries(adds).forEach(([playerId, rosterId]) => {
                     const p = players[playerId];
                     const fullName = p?.full_name || p?.last_name || `Player ${playerId}`;
@@ -198,7 +225,7 @@
                     grouped[rosterId].push(`received <em>${fullName}</em>`);
                 });
 
-                // Add draft picks
+                // Draft picks
                 draftPicks.forEach(dp => {
                     const receiver = dp.owner_id;
                     const label = `Pick ${dp.season} Round ${dp.round} (${rosterMap[dp.roster_id]?.displayName || "Unknown"})`;
@@ -206,14 +233,14 @@
                     grouped[receiver].push(`received <em>${label}</em>`);
                 });
 
-                // Add FAAB
+                // FAAB
                 waivers.forEach(w => {
                     const receiver = w.receiver;
                     grouped[receiver] = grouped[receiver] || [];
                     grouped[receiver].push(`received <em>$${w.amount} FAAB</em>`);
                 });
 
-                // Group by roster_ids for consistent display
+                // Display grouped entries
                 t.roster_ids.forEach(rid => {
                     if (!grouped[rid]) return;
                     const userName = rosterMap[rid]?.teamName + " (" + rosterMap[rid]?.displayName + ")";
@@ -226,45 +253,51 @@
             });
 
             resultsEl.innerHTML = html;
+
+            // Attach toggle listeners
+            document.querySelectorAll('.toggle-json').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const index = btn.dataset.index;
+                    const pre = document.getElementById(`json-${index}`);
+                    if (pre.style.display === 'none') {
+                        pre.style.display = 'block';
+                        btn.textContent = 'Hide JSON';
+                    } else {
+                        pre.style.display = 'none';
+                        btn.textContent = 'Show JSON';
+                    }
+                });
+            });
         }
 
-
         async function getAllTrades(leagueMap) {
-            const allTrades = [];
-
+            const trades = [];
             for (const [season, leagueId] of Object.entries(leagueMap)) {
                 for (let week = 1; week <= 18; week++) {
                     try {
                         const weekTx = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/transactions/${week}`).then(r => r.json());
-                        allTrades.push(...weekTx.map(t => ({ ...t, season }))); // add season to each trade
+                        trades.push(...weekTx.map(t => ({ ...t, season })));
                     } catch (err) {
                         console.warn(`Failed to fetch trades for league ${leagueId} week ${week}`, err);
                     }
                 }
             }
-
-            // filter only trades (type === 'trade')
-            return allTrades.filter(t => t.type === 'trade');
+            return trades.filter(t => t.type === 'trade');
         }
 
         async function getAllLeagueIds(startLeagueId) {
-            const leagueMap = {}; // season -> league_id
+            const leagueMap = {};
             let currentId = startLeagueId;
 
             while (currentId) {
                 const res = await fetch(`https://api.sleeper.app/v1/league/${currentId}`);
                 const league = await res.json();
-
-                // save league id by season
                 leagueMap[league.season] = league.league_id;
-
-                // move to previous league
                 currentId = league.previous_league_id || null;
             }
 
             return leagueMap;
         }
-
     </script>
 </body>
 
