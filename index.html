@@ -250,7 +250,7 @@
                         console.log(pickInfo);
                         playerName = pickInfo.player_name;
                         pickNumber = pickInfo.round + "." + pickInfo.draft_slot;
-                        label = label + ` -> became the ${pickNumber} which became <em>${playerName}</em>`;
+                        label = label + ` -> ${pickNumber} -> <em>${playerName}</em>`;
                     }
 
                     grouped[receiver] = grouped[receiver] || [];
