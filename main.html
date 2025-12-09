@@ -104,11 +104,7 @@
                     };
                 });
 
-                let allTrades = [];
-                for (let week = 1; week <= 18; week++) {
-                    const weekTx = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/transactions/${week}`).then(r => r.json());
-                    allTrades = allTrades.concat(weekTx.filter(t => t.type === 'trade'));
-                }
+                const allTrades = await getAllTrades(leagueId);
 
                 if (allTrades.length === 0) {
                     resultsEl.innerHTML = '<p>No trades found.</p>';
@@ -166,6 +162,25 @@
                 console.error(err);
                 resultsEl.innerHTML = '<p>Error loading trades.</p>';
             }
+        }
+
+        async function getAllTrades(startLeagueId) {
+            const leagueMap = await getAllLeagueIds(startLeagueId); // { season -> leagueId }
+            const allTrades = [];
+
+            for (const [season, leagueId] of Object.entries(leagueMap)) {
+                for (let week = 1; week <= 18; week++) {
+                    try {
+                        const weekTx = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/transactions/${week}`).then(r => r.json());
+                        allTrades.push(...weekTx.map(t => ({ ...t, season }))); // add season to each trade
+                    } catch (err) {
+                        console.warn(`Failed to fetch trades for league ${leagueId} week ${week}`, err);
+                    }
+                }
+            }
+
+            // filter only trades (type === 'trade')
+            return allTrades.filter(t => t.type === 'trade');
         }
 
         async function getAllLeagueIds(startLeagueId) {
