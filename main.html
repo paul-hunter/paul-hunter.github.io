@@ -208,10 +208,6 @@
                 html += `<div class="trade-card">`;
                 html += `<h3>Trade #${i + 1} - Season ${t.season}</h3>`;
 
-                // Toggle button
-                html += `<button class="toggle-json" data-index="${i}">Show JSON</button>`;
-                html += `<pre id="json-${i}" style="display:none;">${JSON.stringify(t, null, 2)}</pre>`;
-
                 const adds = t.adds || {};
                 const draftPicks = t.draft_picks || [];
                 const waivers = t.waiver_budget || [];
@@ -248,6 +244,10 @@
                     grouped[rid].forEach(it => html += `<li>${it}</li>`);
                     html += `</ul></div>`;
                 });
+
+                // Toggle button
+                html += `<button class="toggle-json" data-index="${i}">Show JSON</button>`;
+                html += `<pre id="json-${i}" style="display:none;">${JSON.stringify(t, null, 2)}</pre>`;
 
                 html += `</div>`;
             });
