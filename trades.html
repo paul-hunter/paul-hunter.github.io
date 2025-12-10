@@ -274,8 +274,8 @@
                 });
 
                 // Toggle button
-                html += `<button class="toggle-json" data-index="${i}">Show JSON</button>`;
-                html += `<pre id="json-${i}" style="display:none;">${JSON.stringify(t, null, 2)}</pre>`;
+                // html += `<button class="toggle-json" data-index="${i}">Show JSON</button>`;
+                // html += `<pre id="json-${i}" style="display:none;">${JSON.stringify(t, null, 2)}</pre>`;
 
                 html += `</div>`;
             });
@@ -283,19 +283,19 @@
             resultsEl.innerHTML = html;
 
             // Attach toggle listeners
-            document.querySelectorAll('.toggle-json').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const index = btn.dataset.index;
-                    const pre = document.getElementById(`json-${index}`);
-                    if (pre.style.display === 'none') {
-                        pre.style.display = 'block';
-                        btn.textContent = 'Hide JSON';
-                    } else {
-                        pre.style.display = 'none';
-                        btn.textContent = 'Show JSON';
-                    }
-                });
-            });
+            // document.querySelectorAll('.toggle-json').forEach(btn => {
+            //     btn.addEventListener('click', () => {
+            //         const index = btn.dataset.index;
+            //         const pre = document.getElementById(`json-${index}`);
+            //         if (pre.style.display === 'none') {
+            //             pre.style.display = 'block';
+            //             btn.textContent = 'Hide JSON';
+            //         } else {
+            //             pre.style.display = 'none';
+            //             btn.textContent = 'Show JSON';
+            //         }
+            //     });
+            // });
         }
 
         /**
