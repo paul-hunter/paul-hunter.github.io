@@ -1,375 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sleeper League Trades</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f5f7fa;
-            margin: 0;
-            padding: 20px;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sleeper Tools</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
 
-        h1 {
-            text-align: center;
-        }
+    .container {
+      text-align: center;
+    }
 
-        #input-container {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
+    h1 {
+      margin-bottom: 20px;
+      color: #222;
+    }
 
-        input,
-        button,
-        select {
-            padding: 10px;
-            font-size: 1rem;
-        }
+    a.button {
+      display: inline-block;
+      padding: 12px 22px;
+      background: #0366d6;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 18px;
+      transition: background 0.2s ease;
+    }
 
-        button {
-            cursor: pointer;
-        }
-
-        #results {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .trade-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-
-        .trade-card h3 {
-            margin: 0 0 10px;
-        }
-
-        .trade-entry {
-            margin: 5px 0;
-            padding-left: 10px;
-            border-left: 3px solid #4a90e2;
-        }
-
-        .toggle-json {
-            margin-bottom: 5px;
-            cursor: pointer;
-        }
-
-        pre {
-            background: #eef;
-            padding: 10px;
-            border-radius: 6px;
-            overflow: auto;
-        }
-
-        #filters-container {
-            display: none;
-            /* initially hidden */
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-    </style>
+    a.button:hover {
+      background: #024f9c;
+    }
+  </style>
 </head>
-
 <body>
-    <h1>Sleeper Fantasy League Trades</h1>
-
-    <div id="input-container">
-        <input id="leagueId" type="text" placeholder="Enter League ID" />
-        <button onclick="loadTrades()">Load Trades</button>
-    </div>
-
-    <div id="filters-container" style="display:none;">
-        <select id="seasonSelect">
-            <option value="">All Seasons</option>
-        </select>
-        <select id="ownerSelect">
-            <option value="">All Owners</option>
-        </select>
-    </div>
-
-    <div id="results"></div>
-
-    <script src="players.js"></script>
-    <script>
-        let allTrades = [];
-        let userMap = {};
-        let rosterMap = {};
-        let leagueMap = {};
-        let draftMap = {};
-
-        const seasonSelect = document.getElementById('seasonSelect');
-        const ownerSelect = document.getElementById('ownerSelect');
-
-        seasonSelect.addEventListener('change', renderTrades);
-        ownerSelect.addEventListener('change', renderTrades);
-
-        async function loadTrades() {
-            const leagueId = document.getElementById('leagueId').value.trim();
-            if (!leagueId) return alert('Please enter a league ID');
-
-            const resultsEl = document.getElementById('results');
-            resultsEl.innerHTML = 'Loading...';
-
-            try {
-                // Fetch users and rosters
-                const users = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then(r => r.json());
-                const rosters = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then(r => r.json());
-
-                // Get all league IDs (past seasons)
-                leagueMap = await getAllLeagueIds(leagueId);
-
-                // Map user_id -> { displayName, teamName }
-                userMap = {};
-                users.forEach(user => {
-                    userMap[user.user_id] = {
-                        displayName: user.display_name,
-                        teamName: user.metadata?.team_name || user.display_name
-                    };
-                });
-
-                // Map roster_id -> { displayName, teamName }
-                rosterMap = {};
-                rosters.forEach(roster => {
-                    const ownerId = roster.owner_id;
-                    const userInfo = userMap[ownerId];
-                    rosterMap[roster.roster_id] = {
-                        displayName: userInfo?.displayName || 'Unknown',
-                        teamName: userInfo?.teamName || 'Unknown'
-                    };
-                });
-
-                // Fetch trades from all leagues
-                allTrades = await getAllTrades(leagueMap);
-
-                // Build rosterDraftsMap for all seasons
-                draftMap = await buildDraftMap(leagueMap);
-                console.log(draftMap);
-
-                // Show filters and populate
-                const filtersContainer = document.getElementById('filters-container');
-                filtersContainer.style.display = 'flex';
-                filtersContainer.style.gap = '10px';
-                filtersContainer.style.marginBottom = '20px';
-
-                // Populate season dropdown
-                seasonSelect.innerHTML = '<option value="">All Seasons</option>';
-                for (const season of Object.keys(leagueMap).sort((a, b) => b - a)) {
-                    seasonSelect.innerHTML += `<option value="${season}">${season}</option>`;
-                }
-
-                // Populate owner dropdown
-                ownerSelect.innerHTML = '<option value="">All Owners</option>';
-                Object.values(rosterMap).forEach(r => {
-                    ownerSelect.innerHTML += `<option value="${r.displayName}">${r.teamName} (${r.displayName})</option>`;
-                });
-
-                // Initial render
-                renderTrades();
-            } catch (err) {
-                console.error(err);
-                resultsEl.innerHTML = '<p>Error loading trades.</p>';
-            }
-        }
-
-        function renderTrades() {
-            const resultsEl = document.getElementById('results');
-            resultsEl.innerHTML = ''; // clear previous
-
-            const selectedSeason = seasonSelect.value;
-            const selectedOwner = ownerSelect.value;
-
-            let filteredTrades = allTrades;
-
-            // Filter by season
-            if (selectedSeason) {
-                filteredTrades = filteredTrades.filter(t => t.season === selectedSeason);
-            }
-
-            // Filter by owner
-            if (selectedOwner) {
-                filteredTrades = filteredTrades.filter(t =>
-                    t.roster_ids.some(rid => rosterMap[rid]?.displayName === selectedOwner)
-                );
-            }
-
-            if (filteredTrades.length === 0) {
-                resultsEl.innerHTML = '<p>No trades found for selected filters.</p>';
-                return;
-            }
-
-            // Render trades
-            let html = '';
-            filteredTrades.forEach((t, i) => {
-                html += `<div class="trade-card">`;
-                html += `<h3>Trade #${i + 1} - Season ${t.season}</h3>`;
-
-                const adds = t.adds || {};
-                const draftPicks = t.draft_picks || [];
-                const waivers = t.waiver_budget || [];
-                const grouped = {};
-
-                // Players
-                Object.entries(adds).forEach(([playerId, rosterId]) => {
-                    const p = players[playerId];
-                    const fullName = p?.full_name || p?.last_name || `Player ${playerId}`;
-                    grouped[rosterId] = grouped[rosterId] || [];
-                    grouped[rosterId].push(`received <em>${fullName}</em>`);
-                });
-
-                // Draft picks
-                draftPicks.forEach(dp => {
-                    const receiver = dp.owner_id;
-                    const season = dp.season;
-                    const round = dp.round;
-                    const originalRosterId = dp.roster_id;
-                    const teamName = rosterMap[originalRosterId]?.teamName || "Unknown";
-                    const userName = rosterMap[originalRosterId]?.displayName || "Unknown";
-
-                    let playerName = "Unknown";
-                    let pickNumber = dp.pick_no || "";
-                    
-                    let label = `Pick ${season} Round ${round} (${teamName})`;
-
-                    // Look up in draftMap
-                    if (
-                        draftMap[season] &&
-                        draftMap[season][round] &&
-                        draftMap[season][round][originalRosterId]
-                    ) {
-                        const pickInfo = draftMap[season][round][originalRosterId];
-                        console.log(pickInfo);
-                        playerName = pickInfo.player_name;
-                        pickNumber = pickInfo.round + "." + pickInfo.draft_slot;
-                        label = label + ` -> ${pickNumber} -> <em>${playerName}</em>`;
-                    }
-
-                    grouped[receiver] = grouped[receiver] || [];
-                    grouped[receiver].push(label);
-                });
-
-                // FAAB
-                waivers.forEach(w => {
-                    const receiver = w.receiver;
-                    grouped[receiver] = grouped[receiver] || [];
-                    grouped[receiver].push(`received <em>$${w.amount} FAAB</em>`);
-                });
-
-                // Display grouped entries
-                t.roster_ids.forEach(rid => {
-                    if (!grouped[rid]) return;
-                    const userName = rosterMap[rid]?.teamName + " (" + rosterMap[rid]?.displayName + ")";
-                    html += `<div class="trade-entry"><strong>${userName}</strong><ul>`;
-                    grouped[rid].forEach(it => html += `<li>${it}</li>`);
-                    html += `</ul></div>`;
-                });
-
-                // Toggle button
-                html += `<button class="toggle-json" data-index="${i}">Show JSON</button>`;
-                html += `<pre id="json-${i}" style="display:none;">${JSON.stringify(t, null, 2)}</pre>`;
-
-                html += `</div>`;
-            });
-
-            resultsEl.innerHTML = html;
-
-            // Attach toggle listeners
-            document.querySelectorAll('.toggle-json').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const index = btn.dataset.index;
-                    const pre = document.getElementById(`json-${index}`);
-                    if (pre.style.display === 'none') {
-                        pre.style.display = 'block';
-                        btn.textContent = 'Hide JSON';
-                    } else {
-                        pre.style.display = 'none';
-                        btn.textContent = 'Show JSON';
-                    }
-                });
-            });
-        }
-
-        /**
-         * Builds a complete draft map: season -> round -> roster_id -> { pick, player_id, player_name }
-         */
-        async function buildDraftMap(leagueMap) {
-            const draftMap = {};
-
-            for (const [season, leagueId] of Object.entries(leagueMap)) {
-                try {
-                    // Fetch all drafts for the league
-                    const drafts = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/drafts`).then(r => r.json());
-                    if (!drafts || drafts.length === 0) continue;
-
-                    // Assume first draft is the main draft for season
-                    const draft = await fetch(`https://api.sleeper.app/v1/draft/${drafts[0].draft_id}`).then(r => r.json());
-                    const slotToRoster = draft.slot_to_roster_id || {};
-
-                    // Fetch picks for this draft
-                    const picks = await fetch(`https://api.sleeper.app/v1/draft/${draft.draft_id}/picks`).then(r => r.json());
-
-                    draftMap[season] = {};
-
-                    picks.forEach(pick => {
-                        const round = pick.round;
-                        const rosterId = slotToRoster[pick.draft_slot];
-
-                        if (!draftMap[season][round]) draftMap[season][round] = {};
-
-                        draftMap[season][round][rosterId] = {
-                            absolute_pick: pick.pick_no, // absolute pick number
-                            round: round,
-                            draft_slot: pick.draft_slot,
-                            player_id: pick.player_id,
-                            player_name: pick.metadata?.first_name + ' ' + pick.metadata?.last_name
-                        };
-                    });
-                } catch (err) {
-                    console.warn(`Failed to fetch draft data for league ${leagueId} season ${season}`, err);
-                }
-            }
-
-            return draftMap;
-        }
-
-        async function getAllTrades(leagueMap) {
-            const trades = [];
-            for (const [season, leagueId] of Object.entries(leagueMap)) {
-                for (let week = 1; week <= 18; week++) {
-                    try {
-                        const weekTx = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/transactions/${week}`).then(r => r.json());
-                        trades.push(...weekTx.map(t => ({ ...t, season })));
-                    } catch (err) {
-                        console.warn(`Failed to fetch trades for league ${leagueId} week ${week}`, err);
-                    }
-                }
-            }
-            return trades.filter(t => t.type === 'trade');
-        }
-
-        async function getAllLeagueIds(startLeagueId) {
-            const leagueMap = {};
-            let currentId = startLeagueId;
-
-            while (currentId) {
-                const res = await fetch(`https://api.sleeper.app/v1/league/${currentId}`);
-                const league = await res.json();
-                leagueMap[league.season] = league.league_id;
-                currentId = league.previous_league_id || null;
-            }
-
-            return leagueMap;
-        }
-    </script>
+  <div class="container">
+    <h1>Sleeper Tools</h1>
+    <a href="trades.html" class="button">View Trades</a>
+  </div>
 </body>
-
 </html>
