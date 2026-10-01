@@ -85,14 +85,8 @@
 
     .tools-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 16px;
-    }
-
-    @media (max-width: 580px) {
-      .tools-grid {
-        grid-template-columns: 1fr;
-      }
     }
 
     .tool-card {
@@ -176,34 +170,22 @@
     </div>
 
     <div class="tools-grid">
-      <a id="tradeLink" href="trades.html" class="tool-card">
-        <div>
-          <span class="tool-tag">Trades</span>
-          <h2 class="tool-title">Trade History</h2>
-          <p class="tool-desc">
-            Complete log of completed trades across seasons. Includes traded draft picks, resulting drafted players, and FAAB exchanges.
-          </p>
-        </div>
-        <div class="tool-link-action">Open Trades</div>
-      </a>
-
-      <a id="waiverLink" href="waivers.html" class="tool-card">
+      <a id="transactionLink" href="transactions.html" class="tool-card">
         <div>
           <span class="tool-tag">Transactions</span>
           <h2 class="tool-title">Transactions</h2>
           <p class="tool-desc">
-            Historical record of waiver claims, winning and losing bids, FAAB expenditures, free agent pickups, and drops.
+            Historical record of trades, waiver claims, winning and losing bids, FAAB expenditures, free agent pickups, and drops.
           </p>
         </div>
-        <div class="tool-link-action">Open Waivers</div>
+        <div class="tool-link-action">Open Transactions</div>
       </a>
     </div>
   </div>
 
   <script>
     const input = document.getElementById('quickLeagueId');
-    const tradeLink = document.getElementById('tradeLink');
-    const waiverLink = document.getElementById('waiverLink');
+    const transactionLink = document.getElementById('transactionLink');
 
     const saved = localStorage.getItem('sleeper_league_id');
     if (saved) {
@@ -221,11 +203,9 @@
 
     function updateLinks(leagueId) {
       if (leagueId) {
-        tradeLink.href = `trades.html?league=${encodeURIComponent(leagueId)}`;
-        waiverLink.href = `waivers.html?league=${encodeURIComponent(leagueId)}`;
+        transactionLink.href = `transactions.html?league=${encodeURIComponent(leagueId)}`;
       } else {
-        tradeLink.href = 'trades.html';
-        waiverLink.href = 'waivers.html';
+        transactionLink.href = 'transactions.html';
       }
     }
   </script>
