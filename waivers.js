@@ -902,3 +902,75 @@ function debounce(fn, delay) {
         timer = setTimeout(() => fn.apply(this, args), delay);
     };
 }
+
+/**
+ * Exports currently filtered transactions as human-friendly JSON with player and team names
+ */
+function downloadFriendlyJson() {
+    if (!filteredTransactions || filteredTransactions.length === 0) {
+        alert('No transactions to download for the current filters.');
+        return;
+    }
+
+    const friendlyData = filteredTransactions.map(t => {
+        let actionLabel = 'Free Agent Pickup';
+        if (t.actionCategory === 'waiver') {
+            actionLabel = 'Waiver Claim';
+        } else if (t.actionCategory === 'drop') {
+            actionLabel = 'Player Drop';
+        }
+
+        return {
+            transaction_id: t.id,
+            date: t.timestamp ? new Date(t.timestamp).toISOString() : null,
+            date_formatted: t.dateFormatted,
+            season: t.season,
+            week: t.week,
+            period: t.weekDisplay,
+            is_offseason: Boolean(t.isOffseason),
+            type: t.type,
+            action: actionLabel,
+            status: t.status,
+            team_name: t.ownerInfo?.teamName || 'Unknown Team',
+            manager: t.ownerInfo?.displayName || 'Unknown Manager',
+            faab_bid: t.bid,
+            priority: t.priority,
+            added_players: t.adds.map(a => ({
+                name: a.player.name,
+                position: a.player.pos || null,
+                nfl_team: a.player.team || null,
+                player_id: a.playerId
+            })),
+            dropped_players: t.drops.map(d => ({
+                name: d.player.name,
+                position: d.player.pos || null,
+                nfl_team: d.player.team || null,
+                player_id: d.playerId
+            })),
+            failure_reason: t.status === 'failed' ? (t.notes || null) : null
+        };
+    });
+
+    // Build descriptive filename based on active filters
+    const nameParts = ['sleeper', 'transactions'];
+    if (seasonSelect.value) nameParts.push(seasonSelect.value);
+    if (weekSelect.value) nameParts.push(weekSelect.value);
+    if (typeSelect.value) nameParts.push(typeSelect.value);
+    if (statusSelect.value) nameParts.push(statusSelect.value);
+    if (ownerSelect.value) {
+        const sanitizedOwner = ownerSelect.value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 20);
+        nameParts.push(sanitizedOwner);
+    }
+    const filename = `${nameParts.join('_')}.json`;
+
+    const jsonStr = JSON.stringify(friendlyData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
