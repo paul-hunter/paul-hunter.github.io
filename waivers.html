@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sleeper Waiver Transactions</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #cbd5e1;
+            --border-light: #e2e8f0;
+            --border-dark: #475569;
+            --subtle-bg: #f1f5f9;
+
+            /* Muted action and status colors */
+            --add-bg: #ecfdf5;
+            --add-border: #a7f3d0;
+            --add-text: #065f46;
+
+            --drop-bg: #fef2f2;
+            --drop-border: #fecaca;
+            --drop-text: #991b1b;
+
+            --complete-bg: #f0fdf4;
+            --complete-border: #bbf7d0;
+            --complete-text: #166534;
+
+            --failed-bg: #fef2f2;
+            --failed-border: #fecaca;
+            --failed-text: #991b1b;
+
+            --bid-bg: #fefce8;
+            --bid-border: #fde68a;
+            --bid-text: #854d0e;
+
+            --btn-primary: #334155;
+            --btn-primary-hover: #1e293b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text-main);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        /* Top Navigation Bar */
+        .navbar {
+            background: #ffffff;
+            border-bottom: 1px solid var(--border);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            text-decoration: none;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border: 1px solid var(--border-light);
+            border-radius: 2px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            background: #ffffff;
+            transition: all 0.15s ease;
+        }
+
+        .nav-link:hover {
+            color: var(--text-main);
+            border-color: var(--border-dark);
+            background: var(--subtle-bg);
+        }
+
+        .nav-link.active {
+            background: var(--btn-primary);
+            color: #ffffff;
+            border-color: var(--btn-primary);
+        }
+
+        .container {
+            max-width: 1020px;
+            margin: 0 auto;
+            padding: 28px 20px 80px;
+        }
+
+        .page-header {
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 14px;
+        }
+
+        .page-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+
+        .page-header p {
+            color: var(--text-muted);
+            font-size: 0.88rem;
+        }
+
+        /* Search / Input Box */
+        .search-card {
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: var(--card-bg);
+            padding: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .input-group {
+            flex: 1;
+            min-width: 260px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 9px 12px;
+            font-size: 0.92rem;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            outline: none;
+            font-family: inherit;
+            background: #ffffff;
+            color: var(--text-main);
+        }
+
+        .input-group input:focus {
+            border-color: var(--border-dark);
+        }
+
+        .btn-primary {
+            background: var(--btn-primary);
+            color: #ffffff;
+            border: 1px solid var(--btn-primary);
+            border-radius: 2px;
+            padding: 9px 18px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .btn-primary:hover {
+            background: var(--btn-primary-hover);
+            border-color: var(--btn-primary-hover);
+        }
+
+        .btn-primary:disabled {
+            background: #94a3b8;
+            border-color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .options-row {
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .options-row label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        /* League Info Banner */
+        .league-info-banner {
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: var(--card-bg);
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .league-meta h2 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .league-meta p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Stats Grid (Minimal Table Dashboard) */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            border-top: 1px solid var(--border);
+            border-left: 1px solid var(--border);
+            margin-bottom: 20px;
+            background: var(--card-bg);
+        }
+
+        .stat-card {
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 14px;
+            text-align: left;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 3px;
+        }
+
+        .stat-val {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+            letter-spacing: -0.01em;
+        }
+
+        /* Filter Panel */
+        .filter-panel {
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: var(--card-bg);
+            padding: 14px 16px;
+            margin-bottom: 20px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filter-item label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        select,
+        .filter-input {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: #ffffff;
+            color: var(--text-main);
+            outline: none;
+            font-family: inherit;
+        }
+
+        select:focus,
+        .filter-input:focus {
+            border-color: var(--border-dark);
+        }
+
+        .filter-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-light);
+        }
+
+        .results-count {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+        }
+
+        .view-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-view {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: all 0.15s;
+        }
+
+        .btn-view.active {
+            background: var(--btn-primary);
+            color: #ffffff;
+            border-color: var(--btn-primary);
+        }
+
+        .btn-reset {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 4px 6px;
+            text-decoration: underline;
+        }
+
+        .btn-reset:hover {
+            color: var(--text-main);
+        }
+
+        /* Status & Loading */
+        #status-message {
+            text-align: center;
+            padding: 40px 20px;
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: var(--card-bg);
+        }
+
+        .loader-text {
+            font-family: monospace;
+            font-weight: 600;
+            font-size: 0.85rem;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+        }
+
+        /* Badges & Tags */
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            font-family: monospace;
+            line-height: 1.2;
+            background: #ffffff;
+            color: var(--text-main);
+        }
+
+        .badge-filled {
+            background: var(--btn-primary);
+            color: #ffffff;
+            border-color: var(--btn-primary);
+        }
+
+        .badge-complete {
+            background: var(--complete-bg);
+            border-color: var(--complete-border);
+            color: var(--complete-text);
+        }
+
+        .badge-failed {
+            background: var(--failed-bg);
+            border-color: var(--failed-border);
+            color: var(--failed-text);
+        }
+
+        .badge-bid {
+            background: var(--bid-bg);
+            border-color: var(--bid-border);
+            color: var(--bid-text);
+        }
+
+        .badge-pos {
+            font-size: 0.68rem;
+            padding: 1px 4px;
+            border: 1px solid var(--border-light);
+            border-radius: 2px;
+            font-weight: 700;
+            font-family: monospace;
+            background: var(--subtle-bg);
+            color: var(--text-main);
+        }
+
+        .badge-pos.qb { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+        .badge-pos.rb { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+        .badge-pos.wr { background: #e0f2fe; border-color: #bae6fd; color: #0369a1; }
+        .badge-pos.te { background: #fef3c7; border-color: #fde68a; color: #92400e; }
+        .badge-pos.def{ background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
+        .badge-pos.k  { background: #f3e8ff; border-color: #e9d5ff; color: #6b21a8; }
+
+        /* Cards View */
+        .tx-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .tx-card {
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: var(--card-bg);
+            padding: 14px 16px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+        }
+
+        .tx-card.tx-failed {
+            border-left: 4px solid #f87171;
+            background: #fffafa;
+        }
+
+        .tx-card.tx-success {
+            border-left: 4px solid #34d399;
+        }
+
+        .tx-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 8px;
+        }
+
+        .tx-header-left {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .tx-time {
+            font-size: 0.78rem;
+            font-family: monospace;
+            color: var(--text-muted);
+        }
+
+        .tx-team-info {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .team-name {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .owner-name {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        .tx-players-block {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .tx-player-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.88rem;
+        }
+
+        .action-indicator {
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-family: monospace;
+            text-transform: uppercase;
+            width: 60px;
+            text-align: center;
+        }
+
+        .indicator-add {
+            background: var(--add-bg);
+            border: 1px solid var(--add-border);
+            color: var(--add-text);
+        }
+
+        .indicator-drop {
+            background: var(--drop-bg);
+            border: 1px solid var(--drop-border);
+            color: var(--drop-text);
+        }
+
+        .player-info-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .player-name {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .player-meta {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-family: monospace;
+        }
+
+        .tx-note-box {
+            margin-top: 8px;
+            padding: 6px 10px;
+            border-radius: 2px;
+            font-size: 0.8rem;
+        }
+
+        .tx-note-box.tx-note-failed {
+            border: 1px solid var(--failed-border);
+            background: var(--failed-bg);
+            color: var(--failed-text);
+        }
+
+        .tx-note-box.tx-note-success {
+            border: 1px solid var(--border-light);
+            background: var(--subtle-bg);
+            color: var(--text-muted);
+        }
+
+        .tx-note-prefix {
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-right: 4px;
+            font-family: monospace;
+            font-size: 0.72rem;
+        }
+
+        .tx-footer {
+            margin-top: 8px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn-json {
+            background: none;
+            border: 1px solid var(--border-light);
+            border-radius: 2px;
+            font-size: 0.7rem;
+            font-family: monospace;
+            text-transform: uppercase;
+            cursor: pointer;
+            padding: 2px 6px;
+            color: var(--text-muted);
+        }
+
+        .btn-json:hover {
+            color: var(--text-main);
+            border-color: var(--border-dark);
+        }
+
+        .json-pre {
+            background: #1e293b;
+            color: #f8fafc;
+            padding: 10px;
+            border-radius: 2px;
+            font-size: 0.75rem;
+            font-family: monospace;
+            overflow-x: auto;
+            margin-top: 6px;
+            display: none;
+        }
+
+        /* Table View */
+        .table-responsive {
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            overflow-x: auto;
+            background: #ffffff;
+        }
+
+        .tx-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.84rem;
+        }
+
+        .tx-table th {
+            background: var(--subtle-bg);
+            color: var(--text-main);
+            padding: 9px 12px;
+            font-weight: 700;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .tx-table td {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--border-light);
+            vertical-align: middle;
+        }
+
+        .tx-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .tx-table tr.tx-row-failed {
+            background: #fffafa;
+        }
+
+        .tx-table .cell-player {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        /* Load More */
+        .load-more-wrap {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .btn-load-more {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            color: var(--text-main);
+            padding: 9px 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-load-more:hover {
+            background: var(--subtle-bg);
+            border-color: var(--border-dark);
+        }
+
+        @media (max-width: 640px) {
+            .navbar {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+
+            .filter-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tx-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+        <a href="index.html" class="navbar-brand">Sleeper Tools</a>
+        <nav class="nav-links">
+            <a href="index.html" class="nav-link">Home</a>
+            <a href="trades.html" class="nav-link">Trades</a>
+            <a href="waivers.html" class="nav-link active">Waivers & FA</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="page-header">
+            <h1>Waiver & FA Transactions</h1>
+            <p>Log of waiver claims, winning/losing FAAB bids, free agent additions, and drops.</p>
+        </div>
+
+        <!-- Input Box -->
+        <section class="search-card">
+            <div class="input-row">
+                <div class="input-group">
+                    <input id="leagueIdInput" type="text" placeholder="Enter Sleeper League ID (e.g. 289646328504385536)" autocomplete="off" />
+                </div>
+                <button id="loadBtn" class="btn-primary" onclick="loadTransactions()">Load Transactions</button>
+            </div>
+            <div class="options-row">
+                <label>
+                    <input id="includePastSeasonsCheck" type="checkbox" checked />
+                    Include all past seasons (multi-year history)
+                </label>
+            </div>
+        </section>
+
+        <!-- League Summary Banner -->
+        <div id="leagueInfoBanner" class="league-info-banner" style="display: none;">
+            <div class="league-meta">
+                <h2 id="leagueNameDisplay">League Name</h2>
+                <p id="leagueSubDisplay">Season 2026 · 12 Teams</p>
+            </div>
+            <div id="leagueSettingBadge"></div>
+        </div>
+
+        <!-- Metric Statistics Cards -->
+        <div id="statsGrid" class="stats-grid" style="display: none;">
+            <div class="stat-card">
+                <div class="stat-label">Total Moves</div>
+                <div id="statTotal" class="stat-val">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Waiver Claims</div>
+                <div id="statWaivers" class="stat-val">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">FA Pickups</div>
+                <div id="statFA" class="stat-val">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Drops</div>
+                <div id="statDrops" class="stat-val">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">FAAB Spent</div>
+                <div id="statFaab" class="stat-val">$0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Highest Bid</div>
+                <div id="statMaxBid" class="stat-val">$0</div>
+            </div>
+        </div>
+
+        <!-- Filters Control Center -->
+        <section id="filterPanel" class="filter-panel" style="display: none;">
+            <div class="filter-grid">
+                <div class="filter-item">
+                    <label for="playerSearchInput">Search Player / Team</label>
+                    <input id="playerSearchInput" class="filter-input" type="text" placeholder="e.g. Nacua, Ravens, Stroud..." />
+                </div>
+                <div class="filter-item">
+                    <label for="seasonSelect">Season</label>
+                    <select id="seasonSelect">
+                        <option value="">All Seasons</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="weekSelect">Week</label>
+                    <select id="weekSelect">
+                        <option value="">All Weeks</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="ownerSelect">Owner / Team</label>
+                    <select id="ownerSelect">
+                        <option value="">All Owners</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="typeSelect">Transaction Type</label>
+                    <select id="typeSelect">
+                        <option value="">All Types</option>
+                        <option value="waiver">Waiver Claims Only</option>
+                        <option value="free_agent">Free Agent Pickups</option>
+                        <option value="drop">Drops Only</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="statusSelect">Status</label>
+                    <select id="statusSelect">
+                        <option value="">All Statuses</option>
+                        <option value="complete">Complete (Successful)</option>
+                        <option value="failed">Failed / Outbid</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="sortSelect">Sort By</label>
+                    <select id="sortSelect">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="highest_bid">Highest FAAB Bid</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-toolbar">
+                <div id="resultsCount" class="results-count">Showing 0 transactions</div>
+                <div class="view-controls">
+                    <button id="btnCardsView" class="btn-view active" onclick="switchView('cards')">Cards</button>
+                    <button id="btnTableView" class="btn-view" onclick="switchView('table')">Table</button>
+                    <button class="btn-reset" onclick="resetFilters()">Reset</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Status / Feedback / Loading Message -->
+        <div id="status-message">
+            <p>Enter a Sleeper League ID above to load waiver and free agent activity.</p>
+        </div>
+
+        <!-- Results Container -->
+        <div id="results"></div>
+
+        <!-- Load More Container -->
+        <div id="loadMoreWrap" class="load-more-wrap" style="display: none;">
+            <button id="btnLoadMore" class="btn-load-more" onclick="loadMore()">Show More Transactions</button>
+        </div>
+    </main>
+
+    <script src="players.js"></script>
+    <script src="waivers.js"></script>
+</body>
+
+</html>

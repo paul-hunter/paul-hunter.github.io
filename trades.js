@@ -10,9 +10,37 @@ const ownerSelect = document.getElementById('ownerSelect');
 seasonSelect.addEventListener('change', renderTrades);
 ownerSelect.addEventListener('change', renderTrades);
 
+const leagueInputEl = document.getElementById('leagueId');
+if (leagueInputEl) {
+    leagueInputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            loadTrades();
+        }
+    });
+}
+
+// Auto-check URL query param or localStorage
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramLeagueId = urlParams.get('league') || urlParams.get('league_id');
+    const savedLeagueId = localStorage.getItem('sleeper_league_id');
+
+    if (paramLeagueId && leagueInputEl) {
+        leagueInputEl.value = paramLeagueId.trim();
+        loadTrades();
+    } else if (savedLeagueId && leagueInputEl) {
+        leagueInputEl.value = savedLeagueId.trim();
+    }
+});
+
 async function loadTrades() {
     const leagueId = document.getElementById('leagueId').value.trim();
     if (!leagueId) return alert('Please enter a league ID');
+
+    localStorage.setItem('sleeper_league_id', leagueId);
+    const newUrl = new URL(window.location);
+    newUrl.searchParams.set('league', leagueId);
+    window.history.replaceState({}, '', newUrl);
 
     const resultsEl = document.getElementById('results');
     resultsEl.innerHTML = 'Loading...';
@@ -60,8 +88,14 @@ async function loadTrades() {
 
         // Populate season dropdown
         seasonSelect.innerHTML = '<option value="">All Seasons</option>';
-        for (const season of Object.keys(leagueMap).sort((a, b) => b - a)) {
+        const sortedSeasons = Object.keys(leagueMap).sort((a, b) => b - a);
+        for (const season of sortedSeasons) {
             seasonSelect.innerHTML += `<option value="${season}">${season}</option>`;
+        }
+        if (sortedSeasons.includes('2026')) {
+            seasonSelect.value = '2026';
+        } else if (sortedSeasons.length > 0) {
+            seasonSelect.value = sortedSeasons[0];
         }
 
         // Populate owner dropdown

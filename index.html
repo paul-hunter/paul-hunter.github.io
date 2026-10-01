@@ -1,50 +1,234 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sleeper Tools</title>
   <style>
-    body {
+    * {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: Arial, sans-serif;
-      background: #f4f6f8;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      padding: 40px 20px;
     }
 
     .container {
-      text-align: center;
+      max-width: 680px;
+      width: 100%;
+    }
+
+    header {
+      margin-bottom: 28px;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 14px;
     }
 
     h1 {
-      margin-bottom: 20px;
-      color: #222;
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+      color: #1e293b;
+      margin-bottom: 4px;
     }
 
-    a.button {
-      display: inline-block;
-      padding: 12px 22px;
-      background: #0366d6;
-      color: #fff;
+    .subtitle {
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+
+    .league-input-row {
+      margin-bottom: 24px;
+    }
+
+    .league-input-row label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      color: #475569;
+    }
+
+    .input-wrapper {
+      display: flex;
+    }
+
+    .input-wrapper input {
+      flex: 1;
+      border: 1px solid #cbd5e1;
+      border-radius: 2px;
+      padding: 10px 14px;
+      font-size: 0.92rem;
+      outline: none;
+      font-family: inherit;
+      background: #ffffff;
+      color: #1e293b;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+
+    .input-wrapper input:focus {
+      border-color: #475569;
+    }
+
+    .tools-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 580px) {
+      .tools-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .tool-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 2px;
+      padding: 22px;
       text-decoration: none;
-      border-radius: 6px;
-      font-size: 18px;
-      transition: background 0.2s ease;
+      color: #1e293b;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 190px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+      transition: all 0.15s ease;
     }
 
-    a.button:hover {
-      background: #024f9c;
+    .tool-card:hover {
+      border-color: #94a3b8;
+      background: #fdfdfd;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .tool-tag {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      margin-bottom: 10px;
+      font-family: monospace;
+    }
+
+    .tool-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+      color: #1e293b;
+    }
+
+    .tool-desc {
+      font-size: 0.85rem;
+      color: #64748b;
+      line-height: 1.45;
+      margin-bottom: 18px;
+    }
+
+    .tool-link-action {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #334155;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tool-link-action::after {
+      content: "->";
+      font-family: monospace;
+      font-weight: bold;
     }
   </style>
 </head>
+
 <body>
   <div class="container">
-    <h1>Sleeper Tools</h1>
-    <a href="trades.html" class="button">View Trades</a>
+    <header>
+      <h1>Sleeper Tools</h1>
+      <p class="subtitle">Historical league data, trades, and waiver wire analytics.</p>
+    </header>
+
+    <div class="league-input-row">
+      <label for="quickLeagueId">Sleeper League ID</label>
+      <div class="input-wrapper">
+        <input id="quickLeagueId" type="text" placeholder="Enter League ID to jump straight in" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="tools-grid">
+      <a id="tradeLink" href="trades.html" class="tool-card">
+        <div>
+          <span class="tool-tag">Trades</span>
+          <h2 class="tool-title">Trade History</h2>
+          <p class="tool-desc">
+            Complete log of completed trades across seasons. Includes traded draft picks, resulting drafted players, and FAAB exchanges.
+          </p>
+        </div>
+        <div class="tool-link-action">Open Trades</div>
+      </a>
+
+      <a id="waiverLink" href="waivers.html" class="tool-card">
+        <div>
+          <span class="tool-tag">Transactions</span>
+          <h2 class="tool-title">Waivers & FA</h2>
+          <p class="tool-desc">
+            Historical record of waiver claims, winning and losing bids, FAAB expenditures, free agent pickups, and drops.
+          </p>
+        </div>
+        <div class="tool-link-action">Open Waivers</div>
+      </a>
+    </div>
   </div>
+
+  <script>
+    const input = document.getElementById('quickLeagueId');
+    const tradeLink = document.getElementById('tradeLink');
+    const waiverLink = document.getElementById('waiverLink');
+
+    const saved = localStorage.getItem('sleeper_league_id');
+    if (saved) {
+      input.value = saved;
+      updateLinks(saved);
+    }
+
+    input.addEventListener('input', () => {
+      const val = input.value.trim();
+      if (val) {
+        localStorage.setItem('sleeper_league_id', val);
+      }
+      updateLinks(val);
+    });
+
+    function updateLinks(leagueId) {
+      if (leagueId) {
+        tradeLink.href = `trades.html?league=${encodeURIComponent(leagueId)}`;
+        waiverLink.href = `waivers.html?league=${encodeURIComponent(leagueId)}`;
+      } else {
+        tradeLink.href = 'trades.html';
+        waiverLink.href = 'waivers.html';
+      }
+    }
+  </script>
 </body>
+
 </html>
