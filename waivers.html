@@ -317,6 +317,200 @@
             border-color: var(--border-dark);
         }
 
+        /* Week Multi-Select Component */
+        .filter-item-week {
+            position: relative;
+        }
+
+        .week-picker {
+            position: relative;
+            width: 100%;
+        }
+
+        .week-picker-btn {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: #ffffff;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            text-align: left;
+            min-height: 38px;
+            font-family: inherit;
+            box-sizing: border-box;
+            transition: border-color 0.15s;
+        }
+
+        .week-picker-btn:hover,
+        .week-picker-btn:focus {
+            border-color: var(--border-dark);
+            outline: none;
+        }
+
+        #weekSelectedDisplay {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 6px;
+        }
+
+        .dropdown-chevron {
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .week-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            min-width: 270px;
+            background: #ffffff;
+            border: 1px solid var(--border-dark);
+            border-radius: 2px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+            padding: 10px;
+            display: none;
+            z-index: 1000;
+        }
+
+        .week-dropdown-menu.open {
+            display: block;
+        }
+
+        .week-picker-presets {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .btn-picker-preset {
+            flex: 1;
+            font-family: inherit;
+            font-size: 0.72rem;
+            font-weight: 500;
+            padding: 4px 6px;
+            background: var(--subtle-bg);
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            color: var(--text-muted);
+            cursor: pointer;
+            text-align: center;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .btn-picker-preset:hover {
+            background: var(--border-light);
+            color: var(--text-main);
+        }
+
+        .week-picker-range {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .range-label {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.68rem;
+            letter-spacing: 0.03em;
+        }
+
+        .week-range-select {
+            padding: 3px 4px;
+            font-size: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            background: #ffffff;
+            color: var(--text-main);
+            width: auto;
+            flex: 1;
+            font-family: inherit;
+        }
+
+        .range-sep {
+            font-size: 0.75rem;
+        }
+
+        .btn-picker-apply {
+            font-family: inherit;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 4px 8px;
+            background: var(--btn-primary);
+            color: #ffffff;
+            border: 1px solid var(--btn-primary);
+            border-radius: 2px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .btn-picker-apply:hover {
+            background: var(--btn-primary-hover);
+        }
+
+        .week-picker-divider {
+            border-top: 1px solid var(--border-light);
+            margin: 8px 0;
+        }
+
+        .week-checkbox-full {
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px dashed var(--border-light);
+        }
+
+        .week-checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .week-check-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.76rem;
+            color: var(--text-main);
+            cursor: pointer;
+            padding: 3px 4px;
+            border-radius: 2px;
+            user-select: none;
+        }
+
+        .week-check-label:hover {
+            background: var(--subtle-bg);
+        }
+
+        .week-check-input {
+            cursor: pointer;
+            margin: 0;
+            accent-color: var(--btn-primary);
+        }
+
+        @media (max-width: 640px) {
+            .week-dropdown-menu {
+                left: auto;
+                right: 0;
+                min-width: 250px;
+                max-width: 90vw;
+            }
+        }
+
         .filter-toolbar {
             display: flex;
             justify-content: space-between;
@@ -812,11 +1006,36 @@
                         <option value="">All Seasons</option>
                     </select>
                 </div>
-                <div class="filter-item">
-                    <label for="weekSelect">Week</label>
-                    <select id="weekSelect">
-                        <option value="">All Weeks</option>
-                    </select>
+                <div class="filter-item filter-item-week" id="weekFilterGroup">
+                    <label id="weekFilterLabel">Week</label>
+                    <div class="week-picker" id="weekPicker">
+                        <button type="button" id="weekPickerBtn" class="week-picker-btn" aria-haspopup="true" aria-expanded="false" title="All Weeks">
+                            <span id="weekSelectedDisplay">All Weeks</span>
+                            <span class="dropdown-chevron"></span>
+                        </button>
+                        <div id="weekDropdownMenu" class="week-dropdown-menu">
+                            <div class="week-picker-presets">
+                                <button type="button" class="btn-picker-preset" id="weekPresetAll">All Weeks</button>
+                                <button type="button" class="btn-picker-preset" id="weekPresetReg">Weeks 1-18</button>
+                                <button type="button" class="btn-picker-preset" id="weekPresetClear">Clear</button>
+                            </div>
+                            <div class="week-picker-range">
+                                <span class="range-label">Range:</span>
+                                <select id="weekRangeStart" class="week-range-select"></select>
+                                <span class="range-sep">to</span>
+                                <select id="weekRangeEnd" class="week-range-select"></select>
+                                <button type="button" id="btnApplyWeekRange" class="btn-picker-apply">Apply</button>
+                            </div>
+                            <div class="week-picker-divider"></div>
+                            <div class="week-checkbox-full">
+                                <label class="week-check-label">
+                                    <input type="checkbox" value="offseason" class="week-check-input" id="checkOffseason">
+                                    <span>Offseason</span>
+                                </label>
+                            </div>
+                            <div class="week-checkbox-grid" id="weekCheckboxGrid"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="filter-item">
                     <label for="ownerSelect">Owner / Team</label>

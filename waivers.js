@@ -24,16 +24,30 @@ const resultsCount = document.getElementById('resultsCount');
 // Filter elements
 const playerSearchInput = document.getElementById('playerSearchInput');
 const seasonSelect = document.getElementById('seasonSelect');
-const weekSelect = document.getElementById('weekSelect');
 const ownerSelect = document.getElementById('ownerSelect');
 const typeSelect = document.getElementById('typeSelect');
 const statusSelect = document.getElementById('statusSelect');
 const sortSelect = document.getElementById('sortSelect');
 
+// Multi-week selector elements & state
+const ALL_WEEKS_ORDERED = ['offseason', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'];
+const selectedWeeks = new Set();
+const weekPicker = document.getElementById('weekPicker');
+const weekPickerBtn = document.getElementById('weekPickerBtn');
+const weekSelectedDisplay = document.getElementById('weekSelectedDisplay');
+const weekDropdownMenu = document.getElementById('weekDropdownMenu');
+const weekRangeStart = document.getElementById('weekRangeStart');
+const weekRangeEnd = document.getElementById('weekRangeEnd');
+const btnApplyWeekRange = document.getElementById('btnApplyWeekRange');
+const weekPresetAll = document.getElementById('weekPresetAll');
+const weekPresetReg = document.getElementById('weekPresetReg');
+const weekPresetClear = document.getElementById('weekPresetClear');
+const weekCheckboxGrid = document.getElementById('weekCheckboxGrid');
+const checkOffseason = document.getElementById('checkOffseason');
+
 // Event Listeners for Filters
 playerSearchInput.addEventListener('input', debounce(applyFiltersAndRender, 200));
 seasonSelect.addEventListener('change', applyFiltersAndRender);
-weekSelect.addEventListener('change', applyFiltersAndRender);
 ownerSelect.addEventListener('change', applyFiltersAndRender);
 typeSelect.addEventListener('change', applyFiltersAndRender);
 statusSelect.addEventListener('change', applyFiltersAndRender);
@@ -48,6 +62,8 @@ leagueIdInput.addEventListener('keydown', (e) => {
 
 // Auto-check URL param or localStorage on load
 window.addEventListener('DOMContentLoaded', () => {
+    initWeekPicker();
+
     const urlParams = new URLSearchParams(window.location.search);
     const paramLeagueId = urlParams.get('league') || urlParams.get('league_id');
     const savedLeagueId = localStorage.getItem('sleeper_league_id');
@@ -416,14 +432,10 @@ function populateFilterControls(seasons) {
         seasonSelect.value = seasons[0];
     }
 
-    // Populate Week dropdown with Offseason as distinct option
-    weekSelect.innerHTML = `
-        <option value="">All Weeks</option>
-        <option value="offseason">Offseason</option>
-    `;
-    for (let w = 1; w <= 18; w++) {
-        weekSelect.innerHTML += `<option value="${w}">Week ${w}</option>`;
-    }
+    // Reset week selection to All Weeks
+    selectedWeeks.clear();
+    syncWeekCheckboxes();
+    updateWeekSelectedDisplay();
 
     // Populate Owner dropdown (combine unique owners across all loaded seasons)
     const ownersMap = new Map();
@@ -450,7 +462,6 @@ function populateFilterControls(seasons) {
 function applyFiltersAndRender() {
     const searchQuery = playerSearchInput.value.trim().toLowerCase();
     const selectedSeason = seasonSelect.value;
-    const selectedWeek = weekSelect.value;
     const selectedOwner = ownerSelect.value;
     const selectedType = typeSelect.value;
     const selectedStatus = statusSelect.value;
@@ -460,13 +471,9 @@ function applyFiltersAndRender() {
         // Season filter
         if (selectedSeason && t.season !== selectedSeason) return false;
 
-        // Week filter (supports "offseason" and individual weeks 1-18)
-        if (selectedWeek) {
-            if (selectedWeek === 'offseason') {
-                if (!t.isOffseason) return false;
-            } else {
-                if (t.isOffseason || String(t.week) !== selectedWeek) return false;
-            }
+        // Week filter (supports multiple selected weeks, "offseason", and individual weeks 1-18)
+        if (selectedWeeks.size > 0 && selectedWeeks.size < ALL_WEEKS_ORDERED.length) {
+            if (!selectedWeeks.has(t.weekValue)) return false;
         }
 
         // Owner filter
@@ -847,7 +854,9 @@ function resetFilters() {
     } else {
         seasonSelect.value = '';
     }
-    weekSelect.value = '';
+    selectedWeeks.clear();
+    syncWeekCheckboxes();
+    updateWeekSelectedDisplay();
     ownerSelect.value = '';
     typeSelect.value = '';
     statusSelect.value = '';
@@ -954,7 +963,13 @@ function downloadFriendlyJson() {
     // Build descriptive filename based on active filters
     const nameParts = ['sleeper', 'transactions'];
     if (seasonSelect.value) nameParts.push(seasonSelect.value);
-    if (weekSelect.value) nameParts.push(weekSelect.value);
+    if (selectedWeeks.size > 0 && selectedWeeks.size < ALL_WEEKS_ORDERED.length) {
+        const weekTag = formatWeekSelectionLabel(Array.from(selectedWeeks))
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        if (weekTag) nameParts.push(weekTag);
+    }
     if (typeSelect.value) nameParts.push(typeSelect.value);
     if (statusSelect.value) nameParts.push(statusSelect.value);
     if (ownerSelect.value) {
@@ -973,4 +988,223 @@ function downloadFriendlyJson() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+/**
+ * Initializes the multi-week filter component, event handlers, and range controls
+ */
+function initWeekPicker() {
+    if (!weekDropdownMenu) return;
+
+    // Populate Range selects
+    weekRangeStart.innerHTML = '<option value="offseason">Offseason</option>';
+    weekRangeEnd.innerHTML = '<option value="offseason">Offseason</option>';
+    for (let w = 1; w <= 18; w++) {
+        weekRangeStart.innerHTML += `<option value="${w}">Wk ${w}</option>`;
+        weekRangeEnd.innerHTML += `<option value="${w}">Wk ${w}</option>`;
+    }
+    weekRangeStart.value = '1';
+    weekRangeEnd.value = '3';
+
+    // Populate Checkbox grid for weeks 1 to 18
+    weekCheckboxGrid.innerHTML = '';
+    for (let w = 1; w <= 18; w++) {
+        const lbl = document.createElement('label');
+        lbl.className = 'week-check-label';
+        lbl.innerHTML = `<input type="checkbox" value="${w}" class="week-check-input"><span>Wk ${w}</span>`;
+        weekCheckboxGrid.appendChild(lbl);
+    }
+
+    // Toggle dropdown open/close
+    weekPickerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = weekDropdownMenu.classList.contains('open');
+        if (isOpen) {
+            closeWeekDropdown();
+        } else {
+            openWeekDropdown();
+        }
+    });
+
+    weekDropdownMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    document.addEventListener('click', () => {
+        closeWeekDropdown();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeWeekDropdown();
+    });
+
+    // Checkbox change listener
+    weekDropdownMenu.addEventListener('change', (e) => {
+        if (e.target && e.target.classList.contains('week-check-input')) {
+            const val = e.target.value;
+            if (e.target.checked) {
+                selectedWeeks.add(val);
+            } else {
+                selectedWeeks.delete(val);
+            }
+            updateWeekSelectedDisplay();
+            applyFiltersAndRender();
+        }
+    });
+
+    // Support Shift+Click for range selection among checkboxes
+    let lastClickedInput = null;
+    weekDropdownMenu.addEventListener('click', (e) => {
+        const input = e.target.classList.contains('week-check-input')
+            ? e.target
+            : e.target.closest('.week-check-label')?.querySelector('.week-check-input');
+        if (!input) return;
+
+        if (e.shiftKey && lastClickedInput && lastClickedInput !== input) {
+            const allInputs = Array.from(weekDropdownMenu.querySelectorAll('.week-check-input'));
+            const fromIdx = allInputs.indexOf(lastClickedInput);
+            const toIdx = allInputs.indexOf(input);
+            if (fromIdx !== -1 && toIdx !== -1) {
+                const min = Math.min(fromIdx, toIdx);
+                const max = Math.max(fromIdx, toIdx);
+                const targetState = input.checked;
+                for (let i = min; i <= max; i++) {
+                    allInputs[i].checked = targetState;
+                    if (targetState) {
+                        selectedWeeks.add(allInputs[i].value);
+                    } else {
+                        selectedWeeks.delete(allInputs[i].value);
+                    }
+                }
+                updateWeekSelectedDisplay();
+                applyFiltersAndRender();
+            }
+        }
+        lastClickedInput = input;
+    });
+
+    // Apply Range button
+    btnApplyWeekRange.addEventListener('click', () => {
+        const startVal = weekRangeStart.value;
+        const endVal = weekRangeEnd.value;
+        const idxA = ALL_WEEKS_ORDERED.indexOf(startVal);
+        const idxB = ALL_WEEKS_ORDERED.indexOf(endVal);
+        if (idxA === -1 || idxB === -1) return;
+        const minIdx = Math.min(idxA, idxB);
+        const maxIdx = Math.max(idxA, idxB);
+
+        selectedWeeks.clear();
+        for (let i = minIdx; i <= maxIdx; i++) {
+            selectedWeeks.add(ALL_WEEKS_ORDERED[i]);
+        }
+        syncWeekCheckboxes();
+        updateWeekSelectedDisplay();
+        applyFiltersAndRender();
+    });
+
+    // Preset buttons
+    weekPresetAll.addEventListener('click', () => {
+        selectedWeeks.clear();
+        syncWeekCheckboxes();
+        updateWeekSelectedDisplay();
+        applyFiltersAndRender();
+    });
+
+    weekPresetReg.addEventListener('click', () => {
+        selectedWeeks.clear();
+        for (let w = 1; w <= 18; w++) {
+            selectedWeeks.add(String(w));
+        }
+        syncWeekCheckboxes();
+        updateWeekSelectedDisplay();
+        applyFiltersAndRender();
+    });
+
+    weekPresetClear.addEventListener('click', () => {
+        selectedWeeks.clear();
+        syncWeekCheckboxes();
+        updateWeekSelectedDisplay();
+        applyFiltersAndRender();
+    });
+}
+
+function openWeekDropdown() {
+    weekDropdownMenu.classList.add('open');
+    weekPickerBtn.setAttribute('aria-expanded', 'true');
+}
+
+function closeWeekDropdown() {
+    weekDropdownMenu.classList.remove('open');
+    weekPickerBtn.setAttribute('aria-expanded', 'false');
+}
+
+function syncWeekCheckboxes() {
+    const inputs = weekDropdownMenu.querySelectorAll('.week-check-input');
+    inputs.forEach(input => {
+        input.checked = selectedWeeks.has(input.value);
+    });
+}
+
+function updateWeekSelectedDisplay() {
+    const text = formatWeekSelectionLabel(Array.from(selectedWeeks));
+    weekSelectedDisplay.textContent = text;
+    weekPickerBtn.setAttribute('title', text);
+}
+
+/**
+ * Returns a human-friendly string for the selected weeks (e.g. "Weeks 1-3", "Offseason, Weeks 1-2")
+ */
+function formatWeekSelectionLabel(selected) {
+    if (!selected || selected.length === 0 || selected.length >= ALL_WEEKS_ORDERED.length) {
+        return 'All Weeks';
+    }
+
+    const hasOffseason = selected.includes('offseason');
+    const numWeeks = selected
+        .filter(x => x !== 'offseason')
+        .map(Number)
+        .sort((a, b) => a - b);
+
+    if (numWeeks.length === 0) {
+        return hasOffseason ? 'Offseason' : 'All Weeks';
+    }
+
+    // Group contiguous ranges
+    const ranges = [];
+    let start = numWeeks[0];
+    let end = numWeeks[0];
+
+    for (let i = 1; i < numWeeks.length; i++) {
+        if (numWeeks[i] === end + 1) {
+            end = numWeeks[i];
+        } else {
+            ranges.push({ start, end });
+            start = numWeeks[i];
+            end = numWeeks[i];
+        }
+    }
+    ranges.push({ start, end });
+
+    const rangeStrings = ranges.map(r => {
+        if (r.start === r.end) return `Wk ${r.start}`;
+        return `Wks ${r.start}-${r.end}`;
+    });
+
+    let result = '';
+    if (hasOffseason) {
+        result = 'Offseason, ' + rangeStrings.join(', ');
+    } else {
+        if (ranges.length === 1 && ranges[0].start === ranges[0].end) {
+            result = `Week ${ranges[0].start}`;
+        } else if (ranges.length === 1) {
+            result = `Weeks ${ranges[0].start}-${ranges[0].end}`;
+        } else {
+            result = rangeStrings.join(', ');
+        }
+    }
+
+    if (result.length > 24) {
+        return `${selected.length} Weeks Selected`;
+    }
+    return result;
 }
