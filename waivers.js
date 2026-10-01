@@ -3,6 +3,9 @@ let allTransactions = [];
 let filteredTransactions = [];
 let leagueMap = {};
 let seasonDataMap = {}; // season -> { users, rosters, rosterMap, userMap }
+let globalDraftMap = {}; // season -> round -> rosterId -> pickInfo
+let globalRosterMap = {};
+let globalUserMap = {};
 let currentLeague = null;
 let currentView = 'cards'; // 'cards' | 'table'
 let renderLimit = 100;
@@ -11,7 +14,6 @@ const PAGE_SIZE = 100;
 // DOM Elements
 const leagueIdInput = document.getElementById('leagueIdInput');
 const loadBtn = document.getElementById('loadBtn');
-const includePastSeasonsCheck = document.getElementById('includePastSeasonsCheck');
 const statusMessage = document.getElementById('status-message');
 const resultsContainer = document.getElementById('results');
 const filterPanel = document.getElementById('filterPanel');
@@ -118,20 +120,43 @@ async function loadTransactions() {
             throw new Error('Invalid league data received from Sleeper.');
         }
 
-        // 2. Discover past seasons if checked
+        // 2. Discover all linked seasons (multi-year history)
         showStatus('<p class="loader-text">[LOADING: Resolving league seasons...]</p>');
-        if (includePastSeasonsCheck.checked) {
-            leagueMap = await getAllLeagueIds(leagueId);
-        } else {
-            leagueMap = { [currentLeague.season]: currentLeague.league_id };
-        }
-
+        leagueMap = await getAllLeagueIds(leagueId);
         const sortedSeasons = Object.keys(leagueMap).sort((a, b) => b - a);
 
         // 3. Display League Banner
         displayLeagueBanner(currentLeague, sortedSeasons);
 
-        // 4. Fetch season data & transactions for each season
+        // 3.5. Fetch current season rosters for continuous franchise tracking
+        showStatus('<p class="loader-text">[LOADING: Resolving continuous franchises...]</p>');
+        const currentUsers = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then(r => r.ok ? r.json() : []);
+        const currentRosters = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then(r => r.ok ? r.json() : []);
+        
+        globalUserMap = {};
+        currentUsers.forEach(u => {
+            globalUserMap[u.user_id] = {
+                displayName: u.display_name || 'Unknown',
+                teamName: u.metadata?.team_name || u.display_name || 'Team ' + u.user_id,
+                avatar: u.avatar
+            };
+        });
+
+        globalRosterMap = {};
+        currentRosters.forEach(r => {
+            const ownerInfo = globalUserMap[r.owner_id];
+            globalRosterMap[r.roster_id] = {
+                displayName: ownerInfo?.displayName || 'Unknown Manager',
+                teamName: ownerInfo?.teamName || `Team #${r.roster_id}`,
+                ownerId: r.owner_id
+            };
+        });
+
+        // 4. Resolve draft history for pick resolution
+        showStatus('<p class="loader-text">[LOADING: Resolving draft picks & history...]</p>');
+        globalDraftMap = await buildDraftMap(leagueMap);
+
+        // 5. Fetch season data & transactions for each season
         for (let i = 0; i < sortedSeasons.length; i++) {
             const season = sortedSeasons[i];
             const sLeagueId = leagueMap[season];
@@ -145,21 +170,21 @@ async function loadTransactions() {
         }
 
         if (allTransactions.length === 0) {
-            showStatus('<p>No waiver or free agent transactions found for this league.</p>');
+            showStatus('<p>No transactions found for this league.</p>');
             loadBtn.disabled = false;
             return;
         }
 
-        // 5. Populate Filter Controls
+        // 6. Populate Filter Controls
         populateFilterControls(sortedSeasons);
 
-        // 6. Reveal panels
+        // 7. Reveal panels
         hideStatus();
         leagueInfoBanner.style.display = 'flex';
         statsGrid.style.display = 'grid';
         filterPanel.style.display = 'block';
 
-        // 7. Initial render
+        // 8. Initial render
         applyFiltersAndRender();
 
     } catch (err) {
@@ -192,6 +217,66 @@ async function getAllLeagueIds(startLeagueId) {
     }
 
     return map;
+}
+
+/**
+ * Builds a complete draft map across all seasons: season -> round -> original_roster_id -> pick details
+ */
+async function buildDraftMap(leagueMap) {
+    const draftMap = {};
+
+    const seasons = Object.entries(leagueMap);
+    await Promise.all(seasons.map(async ([season, leagueId]) => {
+        try {
+            const draftsRes = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/drafts`);
+            if (!draftsRes.ok) return;
+            const drafts = await draftsRes.json();
+            if (!Array.isArray(drafts) || drafts.length === 0) return;
+
+            const completedDrafts = drafts.filter(d => d.status === 'complete');
+            const targetDrafts = completedDrafts.length > 0 ? completedDrafts : [drafts[0]];
+
+            draftMap[season] = draftMap[season] || {};
+
+            for (const draftSummary of targetDrafts) {
+                const [draftDetailRes, picksRes] = await Promise.all([
+                    fetch(`https://api.sleeper.app/v1/draft/${draftSummary.draft_id}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+                    fetch(`https://api.sleeper.app/v1/draft/${draftSummary.draft_id}/picks`).then(r => (r.ok ? r.json() : [])).catch(() => [])
+                ]);
+
+                if (!draftDetailRes || !Array.isArray(picksRes) || picksRes.length === 0) continue;
+
+                const slotToRoster = draftDetailRes.slot_to_roster_id || {};
+
+                picksRes.forEach(pick => {
+                    const round = Number(pick.round);
+                    const rosterId = slotToRoster[pick.draft_slot];
+                    if (!rosterId) return;
+
+                    if (!draftMap[season][round]) draftMap[season][round] = {};
+
+                    const pInfo = getPlayerInfo(pick.player_id);
+                    const pName = (pick.metadata?.first_name || pick.metadata?.last_name)
+                        ? `${pick.metadata?.first_name || ''} ${pick.metadata?.last_name || ''}`.trim()
+                        : (pInfo?.name || `Player ${pick.player_id}`);
+
+                    draftMap[season][round][rosterId] = {
+                        absolute_pick: pick.pick_no,
+                        round: round,
+                        draft_slot: pick.draft_slot,
+                        player_id: pick.player_id,
+                        player_name: pName,
+                        pos: pInfo?.pos || pick.metadata?.position || '',
+                        team: pInfo?.team || pick.metadata?.team || ''
+                    };
+                });
+            }
+        } catch (err) {
+            console.warn(`Failed draft fetch for season ${season} (league ${leagueId})`, err);
+        }
+    }));
+
+    return draftMap;
 }
 
 /**
@@ -254,12 +339,21 @@ async function fetchSeasonTransactionsAndMetadata(season, sLeagueId) {
 
         seasonDataMap[season] = { users: usersRes, rosters: rostersRes, userMap, rosterMap };
 
-        // Flatten weeks and filter for waiver & free_agent activity
+        // Flatten weeks and deduplicate transactions
         const rawTxs = allWeekResults.flat();
-        const relevantTxs = rawTxs.filter(t => t.type === 'waiver' || t.type === 'free_agent');
+        const seenTxIds = new Set();
+        const dedupedTxs = [];
+        for (const t of rawTxs) {
+            if (!t || !t.transaction_id) continue;
+            if (seenTxIds.has(t.transaction_id)) continue;
+            seenTxIds.add(t.transaction_id);
+            dedupedTxs.push(t);
+        }
 
-        // Normalize each transaction
-        return relevantTxs.map(t => normalizeTransaction(t, season, rosterMap, userMap));
+        const relevantTxs = dedupedTxs.filter(t => t.type === 'waiver' || t.type === 'free_agent' || t.type === 'trade');
+
+        // Normalize each transaction using the global maps for continuous franchise tracking
+        return relevantTxs.map(t => normalizeTransaction(t, season, globalRosterMap, globalUserMap));
 
     } catch (err) {
         console.warn(`Failed loading data for season ${season}`, err);
@@ -277,13 +371,129 @@ function normalizeTransaction(t, season, rosterMap, userMap) {
         player: getPlayerInfo(pid)
     })) : [];
 
-    const dropsList = t.drops ? Object.entries(t.drops).map(([pid, rid]) => ({
+    let dropsList = t.drops ? Object.entries(t.drops).map(([pid, rid]) => ({
         playerId: pid,
         rosterId: rid,
         player: getPlayerInfo(pid)
     })) : [];
 
-    // Determine involved roster ID
+    const isWaiver = t.type === 'waiver';
+    const isTrade = t.type === 'trade';
+    const isPureDrop = !isWaiver && !isTrade && addsList.length === 0 && dropsList.length > 0;
+
+    if (isTrade) {
+        // In trades, t.drops includes players traded away AND players dropped to waivers.
+        // We only want to classify genuine drops to waivers as drops.
+        dropsList = dropsList.filter(drop => 
+            !addsList.some(add => add.playerId === drop.playerId)
+        );
+    }
+
+    let actionCategory = 'free_agent';
+    if (isTrade) actionCategory = 'trade';
+    else if (isWaiver) actionCategory = 'waiver';
+    else if (isPureDrop) actionCategory = 'drop';
+
+    // Trade-specific resolution
+    let draftPicksList = [];
+    let faabTransfers = [];
+    let involvedTeams = [];
+    let teamBreakdowns = [];
+
+    if (isTrade) {
+        // Resolve Draft Picks
+        draftPicksList = (t.draft_picks || []).map(dp => {
+            const dpSeason = String(dp.season);
+            const round = Number(dp.round);
+            const originalRosterId = dp.roster_id;
+            const receiverRosterId = dp.owner_id;
+            const origOwnerInfo = rosterMap[originalRosterId] || { teamName: `Team #${originalRosterId}`, displayName: 'Unknown' };
+
+            let resolvedPlayer = null;
+            let pickNumber = null;
+            let displayText = `${dpSeason} Round ${round} (${origOwnerInfo.teamName})`;
+
+            // Check if this pick has resolved in globalDraftMap
+            if (
+                globalDraftMap[dpSeason] &&
+                globalDraftMap[dpSeason][round] &&
+                globalDraftMap[dpSeason][round][originalRosterId]
+            ) {
+                const pickInfo = globalDraftMap[dpSeason][round][originalRosterId];
+                const slotFormatted = pickInfo.draft_slot < 10 ? `0${pickInfo.draft_slot}` : `${pickInfo.draft_slot}`;
+                pickNumber = `${pickInfo.round}.${slotFormatted}`;
+                resolvedPlayer = {
+                    name: pickInfo.player_name,
+                    playerId: pickInfo.player_id,
+                    pos: pickInfo.pos || '',
+                    team: pickInfo.team || '',
+                    pickNumber: pickNumber,
+                    slot: pickInfo.draft_slot,
+                    round: pickInfo.round
+                };
+                displayText = `${dpSeason} ${pickNumber} (${origOwnerInfo.teamName}) -> ${pickInfo.player_name}`;
+            }
+
+            return {
+                season: dpSeason,
+                round,
+                originalRosterId,
+                receiverRosterId,
+                originalTeamName: origOwnerInfo.teamName,
+                originalManager: origOwnerInfo.displayName,
+                resolvedPlayer,
+                pickNumber,
+                displayText
+            };
+        });
+
+        // Resolve FAAB transfers
+        faabTransfers = (t.waiver_budget || []).map(w => ({
+            senderRosterId: w.sender,
+            receiverRosterId: w.receiver,
+            amount: Number(w.amount),
+            senderTeamName: rosterMap[w.sender]?.teamName || `Team #${w.sender}`,
+            receiverTeamName: rosterMap[w.receiver]?.teamName || `Team #${w.receiver}`
+        }));
+
+        // Determine involved teams
+        const involvedRosterIds = Array.from(new Set([
+            ...(t.roster_ids || []),
+            ...(t.consenter_ids || []),
+            ...addsList.map(a => a.rosterId),
+            ...draftPicksList.map(dp => dp.receiverRosterId),
+            ...faabTransfers.map(f => f.receiverRosterId)
+        ]));
+
+        involvedTeams = involvedRosterIds.map(rid => {
+            const info = rosterMap[rid] || { displayName: 'Unknown Manager', teamName: `Team #${rid}` };
+            return {
+                rosterId: rid,
+                teamName: info.teamName,
+                displayName: info.displayName
+            };
+        });
+
+        teamBreakdowns = involvedRosterIds.map(rid => {
+            const info = rosterMap[rid] || { displayName: 'Unknown Manager', teamName: `Team #${rid}` };
+            const receivedPlayers = addsList.filter(a => String(a.rosterId) === String(rid));
+            const receivedPicks = draftPicksList.filter(dp => String(dp.receiverRosterId) === String(rid));
+            const receivedFaab = faabTransfers.filter(f => String(f.receiverRosterId) === String(rid));
+            const droppedPlayers = dropsList.filter(d => String(d.rosterId) === String(rid));
+
+            return {
+                rosterId: rid,
+                teamName: info.teamName,
+                displayName: info.displayName,
+                receivedPlayers,
+                receivedPicks,
+                receivedFaab,
+                droppedPlayers
+            };
+        });
+    }
+
+    // Determine primary roster ID / ownerInfo
     const primaryRosterId =
         (addsList.length > 0 && addsList[0].rosterId) ||
         (dropsList.length > 0 && dropsList[0].rosterId) ||
@@ -291,18 +501,15 @@ function normalizeTransaction(t, season, rosterMap, userMap) {
         (t.consenter_ids && t.consenter_ids[0]) ||
         null;
 
-    const ownerInfo = rosterMap[primaryRosterId] ||
-        userMap[t.creator] || {
+    const ownerInfo = isTrade
+        ? {
+            displayName: involvedTeams.map(it => it.displayName).join(', ') || 'Trade Participants',
+            teamName: involvedTeams.map(it => it.teamName).join(' / ') || 'Trade'
+        }
+        : (rosterMap[primaryRosterId] || userMap[t.creator] || {
             displayName: 'Unknown Manager',
             teamName: primaryRosterId ? `Team #${primaryRosterId}` : 'Unknown Team'
-        };
-
-    const isWaiver = t.type === 'waiver';
-    const isPureDrop = !isWaiver && addsList.length === 0 && dropsList.length > 0;
-
-    let actionCategory = 'free_agent';
-    if (isWaiver) actionCategory = 'waiver';
-    else if (isPureDrop) actionCategory = 'drop';
+        });
 
     const timestamp = t.status_updated || t.created || 0;
     const bid = t.settings && typeof t.settings.waiver_bid !== 'undefined' ? Number(t.settings.waiver_bid) : null;
@@ -325,7 +532,7 @@ function normalizeTransaction(t, season, rosterMap, userMap) {
         id: t.transaction_id,
         raw: t,
         type: t.type,
-        actionCategory, // 'waiver' | 'free_agent' | 'drop'
+        actionCategory, // 'waiver' | 'free_agent' | 'drop' | 'trade'
         status: t.status || 'complete', // 'complete' | 'failed'
         season: String(season),
         week: rawWeek,
@@ -338,6 +545,10 @@ function normalizeTransaction(t, season, rosterMap, userMap) {
         primaryRosterId,
         adds: addsList,
         drops: dropsList,
+        draftPicks: draftPicksList,
+        faabTransfers,
+        involvedTeams,
+        teamBreakdowns,
         bid,
         priority,
         notes
@@ -437,15 +648,11 @@ function populateFilterControls(seasons) {
     syncWeekCheckboxes();
     updateWeekSelectedDisplay();
 
-    // Populate Owner dropdown (combine unique owners across all loaded seasons)
+    // Populate Owner dropdown (using current continuous franchises)
     const ownersMap = new Map();
-    Object.values(seasonDataMap).forEach(sData => {
-        if (sData.rosterMap) {
-            Object.values(sData.rosterMap).forEach(r => {
-                if (r.displayName && r.displayName !== 'Unknown Manager') {
-                    ownersMap.set(r.displayName, r.teamName);
-                }
-            });
+    Object.values(globalRosterMap).forEach(r => {
+        if (r.displayName && r.displayName !== 'Unknown Manager') {
+            ownersMap.set(r.displayName, r.teamName);
         }
     });
 
@@ -477,10 +684,18 @@ function applyFiltersAndRender() {
         }
 
         // Owner filter
-        if (selectedOwner && t.ownerInfo?.displayName !== selectedOwner) return false;
+        if (selectedOwner) {
+            if (t.type === 'trade') {
+                const hasOwner = t.involvedTeams && t.involvedTeams.some(team => team.displayName === selectedOwner);
+                if (!hasOwner) return false;
+            } else {
+                if (t.ownerInfo?.displayName !== selectedOwner) return false;
+            }
+        }
 
         // Action Type filter
         if (selectedType) {
+            if (selectedType === 'trade' && t.actionCategory !== 'trade') return false;
             if (selectedType === 'waiver' && t.actionCategory !== 'waiver') return false;
             if (selectedType === 'free_agent' && t.actionCategory !== 'free_agent') return false;
             if (selectedType === 'drop' && t.actionCategory !== 'drop') return false;
@@ -491,23 +706,47 @@ function applyFiltersAndRender() {
 
         // Search query (player name, position, team, owner, or team name)
         if (searchQuery) {
-            const matchesOwner =
-                (t.ownerInfo.teamName && t.ownerInfo.teamName.toLowerCase().includes(searchQuery)) ||
-                (t.ownerInfo.displayName && t.ownerInfo.displayName.toLowerCase().includes(searchQuery));
+            if (t.type === 'trade') {
+                const matchesOwner = t.involvedTeams && t.involvedTeams.some(team =>
+                    (team.teamName && team.teamName.toLowerCase().includes(searchQuery)) ||
+                    (team.displayName && team.displayName.toLowerCase().includes(searchQuery))
+                );
 
-            const matchesAdd = t.adds.some(a =>
-                a.player.name.toLowerCase().includes(searchQuery) ||
-                a.player.pos.toLowerCase().includes(searchQuery) ||
-                a.player.team.toLowerCase().includes(searchQuery)
-            );
+                const matchesPlayer = [...t.adds, ...t.drops].some(p =>
+                    p.player.name.toLowerCase().includes(searchQuery) ||
+                    p.player.pos.toLowerCase().includes(searchQuery) ||
+                    p.player.team.toLowerCase().includes(searchQuery)
+                );
 
-            const matchesDrop = t.drops.some(d =>
-                d.player.name.toLowerCase().includes(searchQuery) ||
-                d.player.pos.toLowerCase().includes(searchQuery) ||
-                d.player.team.toLowerCase().includes(searchQuery)
-            );
+                const matchesPick = t.draftPicks && t.draftPicks.some(dp =>
+                    dp.displayText.toLowerCase().includes(searchQuery) ||
+                    (dp.resolvedPlayer && (
+                        dp.resolvedPlayer.name.toLowerCase().includes(searchQuery) ||
+                        dp.resolvedPlayer.pos.toLowerCase().includes(searchQuery) ||
+                        dp.resolvedPlayer.team.toLowerCase().includes(searchQuery)
+                    ))
+                );
 
-            if (!matchesOwner && !matchesAdd && !matchesDrop) return false;
+                if (!matchesOwner && !matchesPlayer && !matchesPick) return false;
+            } else {
+                const matchesOwner =
+                    (t.ownerInfo.teamName && t.ownerInfo.teamName.toLowerCase().includes(searchQuery)) ||
+                    (t.ownerInfo.displayName && t.ownerInfo.displayName.toLowerCase().includes(searchQuery));
+
+                const matchesAdd = t.adds.some(a =>
+                    a.player.name.toLowerCase().includes(searchQuery) ||
+                    a.player.pos.toLowerCase().includes(searchQuery) ||
+                    a.player.team.toLowerCase().includes(searchQuery)
+                );
+
+                const matchesDrop = t.drops.some(d =>
+                    d.player.name.toLowerCase().includes(searchQuery) ||
+                    d.player.pos.toLowerCase().includes(searchQuery) ||
+                    d.player.team.toLowerCase().includes(searchQuery)
+                );
+
+                if (!matchesOwner && !matchesAdd && !matchesDrop) return false;
+            }
         }
 
         return true;
@@ -548,6 +787,7 @@ function updateStats(txs) {
     let waiverFailed = 0;
     let faCount = 0;
     let dropCount = 0;
+    let tradeCount = 0;
     let totalFaab = 0;
     let maxBid = 0;
 
@@ -562,9 +802,11 @@ function updateStats(txs) {
             }
         } else if (t.actionCategory === 'free_agent') {
             faCount++;
+        } else if (t.actionCategory === 'trade') {
+            tradeCount++;
         }
 
-        if (t.drops.length > 0) {
+        if (t.actionCategory !== 'trade' && t.drops.length > 0) {
             dropCount += t.drops.length;
         }
 
@@ -574,6 +816,9 @@ function updateStats(txs) {
     });
 
     document.getElementById('statTotal').textContent = totalMoves.toLocaleString();
+    if (document.getElementById('statTrades')) {
+        document.getElementById('statTrades').textContent = tradeCount.toLocaleString();
+    }
     document.getElementById('statWaivers').textContent = `${waiverSuccess} / ${waiverCount}`;
     document.getElementById('statFA').textContent = faCount.toLocaleString();
     document.getElementById('statDrops').textContent = dropCount.toLocaleString();
@@ -635,6 +880,138 @@ function renderCardView(items) {
 
     items.forEach((t, idx) => {
         const isFailed = t.status === 'failed';
+
+        // Render Trade Card
+        if (t.type === 'trade') {
+            const tradeCard = document.createElement('article');
+            tradeCard.className = `tx-card tx-trade ${isFailed ? 'tx-failed' : ''}`;
+
+            const statusBadge = isFailed
+                ? '<span class="badge badge-failed">Failed</span>'
+                : '<span class="badge badge-complete">Complete</span>';
+
+            let sidesHtml = '';
+            (t.teamBreakdowns || []).forEach(team => {
+                let assetsHtml = '';
+
+                // Received Players
+                team.receivedPlayers.forEach(p => {
+                    const posClass = (p.player.pos || '').toLowerCase();
+                    assetsHtml += `
+                        <div class="tx-player-row">
+                            <span class="action-indicator indicator-add">+ PLAYER</span>
+                            <div class="player-info-wrap">
+                                <span class="player-name">${escapeHtml(p.player.name)}</span>
+                                ${p.player.pos ? `<span class="badge-pos ${posClass}">${escapeHtml(p.player.pos)}</span>` : ''}
+                                ${p.player.team ? `<span class="player-meta">${escapeHtml(p.player.team)}</span>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                // Received Draft Picks (with resolved pick slot and player)
+                team.receivedPicks.forEach(dp => {
+                    if (dp.resolvedPlayer) {
+                        const posClass = (dp.resolvedPlayer.pos || '').toLowerCase();
+                        assetsHtml += `
+                            <div class="tx-player-row">
+                                <span class="action-indicator indicator-pick">+ PICK</span>
+                                <div class="player-info-wrap">
+                                    <span class="player-name" style="font-family: monospace;">${escapeHtml(dp.season + ' ' + dp.pickNumber)}</span>
+                                    <span class="trade-arrow">→</span>
+                                    <span class="player-name" style="font-weight: 700;">${escapeHtml(dp.resolvedPlayer.name)}</span>
+                                    ${dp.resolvedPlayer.pos ? `<span class="badge-pos ${posClass}">${escapeHtml(dp.resolvedPlayer.pos)}</span>` : ''}
+                                    <span class="player-meta">(via ${escapeHtml(dp.originalTeamName)})</span>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        assetsHtml += `
+                            <div class="tx-player-row">
+                                <span class="action-indicator indicator-pick">+ PICK</span>
+                                <div class="player-info-wrap">
+                                    <span class="player-name">${escapeHtml(dp.season + ' Round ' + dp.round)}</span>
+                                    <span class="player-meta">(via ${escapeHtml(dp.originalTeamName)})</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+
+                // Received FAAB
+                team.receivedFaab.forEach(f => {
+                    assetsHtml += `
+                        <div class="tx-player-row">
+                            <span class="action-indicator indicator-faab">+ FAAB</span>
+                            <div class="player-info-wrap">
+                                <span class="player-name">$${f.amount} FAAB</span>
+                                <span class="player-meta">(from ${escapeHtml(f.senderTeamName)})</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                // Dropped Players (if any)
+                team.droppedPlayers.forEach(p => {
+                    const posClass = (p.player.pos || '').toLowerCase();
+                    assetsHtml += `
+                        <div class="tx-player-row">
+                            <span class="action-indicator indicator-drop">- DROP</span>
+                            <div class="player-info-wrap">
+                                <span class="player-name">${escapeHtml(p.player.name)}</span>
+                                ${p.player.pos ? `<span class="badge-pos ${posClass}">${escapeHtml(p.player.pos)}</span>` : ''}
+                                ${p.player.team ? `<span class="player-meta">${escapeHtml(p.player.team)}</span>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                if (!assetsHtml) {
+                    assetsHtml = '<div style="font-size: 0.8rem; color: var(--text-muted); padding: 4px 0;">No assets received</div>';
+                }
+
+                sidesHtml += `
+                    <div class="trade-team-box">
+                        <div class="trade-team-name-row">
+                            <span class="team-name">${escapeHtml(team.teamName)}</span>
+                            <span class="owner-name">(@${escapeHtml(team.displayName)}) received:</span>
+                        </div>
+                        <div class="trade-assets-container">
+                            ${assetsHtml}
+                        </div>
+                    </div>
+                `;
+            });
+
+            tradeCard.innerHTML = `
+                <div class="tx-header">
+                    <div class="tx-header-left">
+                        <span class="badge" style="background: var(--subtle-bg);">Season ${t.season} · ${t.weekDisplay}</span>
+                        <span class="badge badge-trade">Trade</span>
+                        ${statusBadge}
+                    </div>
+                    <div class="tx-time">${t.dateFormatted}</div>
+                </div>
+
+                <div class="trade-participants-banner">
+                    ${(t.involvedTeams || []).map(it => escapeHtml(it.teamName)).join(' <span class="trade-banner-sep">⇄</span> ')}
+                </div>
+
+                <div class="tx-trade-sides-grid">
+                    ${sidesHtml}
+                </div>
+
+                <div class="tx-footer">
+                    <button class="btn-json" onclick="toggleJson('json-card-${idx}')">JSON</button>
+                </div>
+                <pre id="json-card-${idx}" class="json-pre">${escapeHtml(JSON.stringify(t.raw, null, 2))}</pre>
+            `;
+
+            list.appendChild(tradeCard);
+            return;
+        }
+
+        // Waiver / FA / Drop Card
         const card = document.createElement('article');
         card.className = `tx-card ${isFailed ? 'tx-failed' : 'tx-success'}`;
 
@@ -753,7 +1130,86 @@ function renderTableView(items) {
     items.forEach((t, idx) => {
         const isFailed = t.status === 'failed';
 
-        // Type
+        // Render Trade Row
+        if (t.type === 'trade') {
+            const typeBadge = '<span class="badge badge-trade">Trade</span>';
+            const statusBadge = isFailed
+                ? '<span class="badge badge-failed">Failed</span>'
+                : '<span class="badge badge-complete">Complete</span>';
+
+            const teamStr = `
+                <div style="font-weight: 600;">
+                    ${(t.involvedTeams || []).map(it => escapeHtml(it.teamName)).join(' <span style="color:var(--text-muted); font-weight:normal;">⇄</span> ')}
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-muted);">
+                    ${(t.involvedTeams || []).map(it => '@' + escapeHtml(it.displayName)).join(', ')}
+                </div>
+            `;
+
+            const receivedSummary = (t.teamBreakdowns || []).map(team => {
+                const items = [];
+                team.receivedPlayers.forEach(p => {
+                    items.push(`<span style="color: var(--add-text); font-weight: 600;">+ ${escapeHtml(p.player.name)}</span>`);
+                });
+                team.receivedPicks.forEach(dp => {
+                    if (dp.resolvedPlayer) {
+                        items.push(`<span style="color: var(--pick-text); font-weight: 600;">${escapeHtml(dp.season + ' ' + dp.pickNumber)} → ${escapeHtml(dp.resolvedPlayer.name)}</span>`);
+                    } else {
+                        items.push(`<span style="color: var(--pick-text);">${escapeHtml(dp.season + ' R' + dp.round)}</span>`);
+                    }
+                });
+                team.receivedFaab.forEach(f => {
+                    items.push(`<span style="color: var(--bid-text); font-weight: 600;">$${f.amount} FAAB</span>`);
+                });
+
+                return `
+                    <div style="margin-bottom: 4px;">
+                        <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted);">${escapeHtml(team.teamName)} got:</span>
+                        <div style="padding-left: 6px;">${items.length > 0 ? items.join(', ') : 'None'}</div>
+                    </div>
+                `;
+            }).join('');
+
+            let droppedStr = '-';
+            const allDrops = [];
+            (t.teamBreakdowns || []).forEach(team => {
+                const teamDrops = team.droppedPlayers.map(d => `<span style="color: var(--drop-text); font-weight: 600;">- ${escapeHtml(d.player.fullNameWithMeta)}</span>`);
+                if (teamDrops.length > 0) {
+                    allDrops.push(`
+                        <div style="margin-bottom: 4px;">
+                            <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted);">${escapeHtml(team.teamName)} dropped:</span>
+                            <div style="padding-left: 6px;">${teamDrops.join('<br>')}</div>
+                        </div>
+                    `);
+                }
+            });
+            if (allDrops.length > 0) {
+                droppedStr = allDrops.join('');
+            }
+
+            let faabStr = '-';
+            const totalFaabAmount = (t.faabTransfers || []).reduce((sum, f) => sum + f.amount, 0);
+            if (totalFaabAmount > 0) {
+                faabStr = `<span class="badge badge-bid">$${totalFaabAmount} FAAB</span>`;
+            }
+
+            rowsHtml += `
+                <tr class="${isFailed ? 'tx-row-failed' : ''}">
+                    <td style="white-space: nowrap; font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">${t.dateFormatted}</td>
+                    <td style="font-weight: 700; font-family: monospace; white-space: nowrap;">${t.season} ${t.isOffseason ? 'Offseason' : 'W' + t.week}</td>
+                    <td>${typeBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td>${teamStr}</td>
+                    <td class="cell-player">${receivedSummary}</td>
+                    <td class="cell-player">${droppedStr}</td>
+                    <td style="text-align: center;">${faabStr}</td>
+                    <td>-</td>
+                </tr>
+            `;
+            return;
+        }
+
+        // Waiver / FA / Drop Row
         let typeBadge = '';
         if (t.actionCategory === 'waiver') {
             typeBadge = '<span class="badge">Waiver</span>';
@@ -819,9 +1275,9 @@ function renderTableView(items) {
                     <th>Type</th>
                     <th>Status</th>
                     <th>Team / Owner</th>
-                    <th>Added</th>
+                    <th>Added / Received</th>
                     <th>Dropped</th>
-                    <th>Bid</th>
+                    <th>Bid / FAAB</th>
                     <th>Notes</th>
                 </tr>
             </thead>
@@ -922,6 +1378,51 @@ function downloadFriendlyJson() {
     }
 
     const friendlyData = filteredTransactions.map(t => {
+        if (t.type === 'trade') {
+            return {
+                transaction_id: t.id,
+                date: t.timestamp ? new Date(t.timestamp).toISOString() : null,
+                date_formatted: t.dateFormatted,
+                season: t.season,
+                week: t.week,
+                period: t.weekDisplay,
+                is_offseason: Boolean(t.isOffseason),
+                type: 'trade',
+                action: 'Trade',
+                status: t.status,
+                teams_involved: (t.teamBreakdowns || []).map(team => ({
+                    team_name: team.teamName,
+                    manager: team.displayName,
+                    received_players: team.receivedPlayers.map(p => ({
+                        name: p.player.name,
+                        position: p.player.pos || null,
+                        nfl_team: p.player.team || null,
+                        player_id: p.playerId
+                    })),
+                    received_picks: team.receivedPicks.map(dp => ({
+                        season: dp.season,
+                        round: dp.round,
+                        pick: dp.pickNumber || null,
+                        original_team: dp.originalTeamName,
+                        resolved_player: dp.resolvedPlayer ? {
+                            name: dp.resolvedPlayer.name,
+                            position: dp.resolvedPlayer.pos || null,
+                            nfl_team: dp.resolvedPlayer.team || null,
+                            player_id: dp.resolvedPlayer.playerId
+                        } : null
+                    })),
+                    received_faab: team.receivedFaab.reduce((sum, f) => sum + f.amount, 0),
+                    dropped_players: team.droppedPlayers.map(d => ({
+                        name: d.player.name,
+                        position: d.player.pos || null,
+                        nfl_team: d.player.team || null,
+                        player_id: d.playerId
+                    }))
+                })),
+                failure_reason: t.status === 'failed' ? (t.notes || null) : null
+            };
+        }
+
         let actionLabel = 'Free Agent Pickup';
         if (t.actionCategory === 'waiver') {
             actionLabel = 'Waiver Claim';
