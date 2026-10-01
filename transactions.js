@@ -7,7 +7,6 @@ let globalDraftMap = {}; // season -> round -> rosterId -> pickInfo
 let globalRosterMap = {};
 let globalUserMap = {};
 let currentLeague = null;
-let currentView = 'cards'; // 'cards' | 'table'
 let renderLimit = 100;
 const PAGE_SIZE = 100;
 
@@ -848,11 +847,7 @@ function renderResults() {
     const itemsToRender = filteredTransactions.slice(0, renderLimit);
     resultsCount.textContent = `Showing ${itemsToRender.length.toLocaleString()} of ${total.toLocaleString()} transactions`;
 
-    if (currentView === 'cards') {
-        renderCardView(itemsToRender);
-    } else {
-        renderTableView(itemsToRender);
-    }
+    renderCardView(itemsToRender);
 
     // Toggle Load More button
     if (renderLimit < total) {
@@ -1119,186 +1114,7 @@ function renderCardView(items) {
     resultsContainer.appendChild(list);
 }
 
-/**
- * Renders Table View
- */
-function renderTableView(items) {
-    const wrap = document.createElement('div');
-    wrap.className = 'table-responsive';
 
-    let rowsHtml = '';
-    items.forEach((t, idx) => {
-        const isFailed = t.status === 'failed';
-
-        // Render Trade Row
-        if (t.type === 'trade') {
-            const typeBadge = '<span class="badge badge-trade">Trade</span>';
-            const statusBadge = isFailed
-                ? '<span class="badge badge-failed">Failed</span>'
-                : '<span class="badge badge-complete">Complete</span>';
-
-            const teamStr = `
-                <div style="font-weight: 600;">
-                    ${(t.involvedTeams || []).map(it => escapeHtml(it.teamName)).join(' <span style="color:var(--text-muted); font-weight:normal;">⇄</span> ')}
-                </div>
-                <div style="font-size: 0.78rem; color: var(--text-muted);">
-                    ${(t.involvedTeams || []).map(it => '@' + escapeHtml(it.displayName)).join(', ')}
-                </div>
-            `;
-
-            const receivedSummary = (t.teamBreakdowns || []).map(team => {
-                const items = [];
-                team.receivedPlayers.forEach(p => {
-                    items.push(`<span style="color: var(--add-text); font-weight: 600;">+ ${escapeHtml(p.player.name)}</span>`);
-                });
-                team.receivedPicks.forEach(dp => {
-                    if (dp.resolvedPlayer) {
-                        items.push(`<span style="color: var(--pick-text); font-weight: 600;">${escapeHtml(dp.season + ' ' + dp.pickNumber)} → ${escapeHtml(dp.resolvedPlayer.name)}</span>`);
-                    } else {
-                        items.push(`<span style="color: var(--pick-text);">${escapeHtml(dp.season + ' R' + dp.round)}</span>`);
-                    }
-                });
-                team.receivedFaab.forEach(f => {
-                    items.push(`<span style="color: var(--bid-text); font-weight: 600;">$${f.amount} FAAB</span>`);
-                });
-
-                return `
-                    <div style="margin-bottom: 4px;">
-                        <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted);">${escapeHtml(team.teamName)} got:</span>
-                        <div style="padding-left: 6px;">${items.length > 0 ? items.join(', ') : 'None'}</div>
-                    </div>
-                `;
-            }).join('');
-
-            let droppedStr = '-';
-            const allDrops = [];
-            (t.teamBreakdowns || []).forEach(team => {
-                const teamDrops = team.droppedPlayers.map(d => `<span style="color: var(--drop-text); font-weight: 600;">- ${escapeHtml(d.player.fullNameWithMeta)}</span>`);
-                if (teamDrops.length > 0) {
-                    allDrops.push(`
-                        <div style="margin-bottom: 4px;">
-                            <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted);">${escapeHtml(team.teamName)} dropped:</span>
-                            <div style="padding-left: 6px;">${teamDrops.join('<br>')}</div>
-                        </div>
-                    `);
-                }
-            });
-            if (allDrops.length > 0) {
-                droppedStr = allDrops.join('');
-            }
-
-            let faabStr = '-';
-            const totalFaabAmount = (t.faabTransfers || []).reduce((sum, f) => sum + f.amount, 0);
-            if (totalFaabAmount > 0) {
-                faabStr = `<span class="badge badge-bid">$${totalFaabAmount} FAAB</span>`;
-            }
-
-            rowsHtml += `
-                <tr class="${isFailed ? 'tx-row-failed' : ''}">
-                    <td style="white-space: nowrap; font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">${t.dateFormatted}</td>
-                    <td style="font-weight: 700; font-family: monospace; white-space: nowrap;">${t.season} ${t.isOffseason ? 'Offseason' : 'W' + t.week}</td>
-                    <td>${typeBadge}</td>
-                    <td>${statusBadge}</td>
-                    <td>${teamStr}</td>
-                    <td class="cell-player">${receivedSummary}</td>
-                    <td class="cell-player">${droppedStr}</td>
-                    <td style="text-align: center;">${faabStr}</td>
-                    <td>-</td>
-                </tr>
-            `;
-            return;
-        }
-
-        // Waiver / FA / Drop Row
-        let typeBadge = '';
-        if (t.actionCategory === 'waiver') {
-            typeBadge = '<span class="badge">Waiver</span>';
-        } else if (t.actionCategory === 'drop') {
-            typeBadge = '<span class="badge">Drop</span>';
-        } else {
-            typeBadge = '<span class="badge">FA</span>';
-        }
-
-        // Status
-        const statusBadge = isFailed
-            ? '<span class="badge badge-failed">Failed</span>'
-            : '<span class="badge badge-complete">Complete</span>';
-
-        // Added Players
-        let addedStr = '-';
-        if (t.adds.length > 0) {
-            addedStr = t.adds.map(a => `<span style="color: var(--add-text); font-weight: 600;">+ ${escapeHtml(a.player.fullNameWithMeta)}</span>`).join('<br>');
-        }
-
-        // Dropped Players
-        let droppedStr = '-';
-        if (t.drops.length > 0) {
-            droppedStr = t.drops.map(d => `<span style="color: var(--drop-text); font-weight: 600;">- ${escapeHtml(d.player.fullNameWithMeta)}</span>`).join('<br>');
-        }
-
-        // Bid / Cost
-        let bidStr = '-';
-        if (t.bid !== null) {
-            bidStr = `<span class="badge badge-bid">$${t.bid}</span>`;
-        } else if (t.priority !== null && t.actionCategory === 'waiver') {
-            bidStr = `#${t.priority}`;
-        }
-
-        // Details / Notes
-        const noteColor = isFailed ? 'var(--failed-text)' : 'var(--text-muted)';
-        const details = t.notes ? `<span style="font-size: 0.78rem; color: ${noteColor};">${escapeHtml(t.notes)}</span>` : '-';
-
-        rowsHtml += `
-            <tr class="${isFailed ? 'tx-row-failed' : ''}">
-                <td style="white-space: nowrap; font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">${t.dateFormatted}</td>
-                <td style="font-weight: 700; font-family: monospace; white-space: nowrap;">${t.season} ${t.isOffseason ? 'Offseason' : 'W' + t.week}</td>
-                <td>${typeBadge}</td>
-                <td>${statusBadge}</td>
-                <td>
-                    <div style="font-weight: 600;">${escapeHtml(t.ownerInfo.teamName)}</div>
-                    <div style="font-size: 0.78rem; color: var(--text-muted);">${escapeHtml(t.ownerInfo.displayName)}</div>
-                </td>
-                <td class="cell-player">${addedStr}</td>
-                <td class="cell-player">${droppedStr}</td>
-                <td style="text-align: center;">${bidStr}</td>
-                <td>${details}</td>
-            </tr>
-        `;
-    });
-
-    wrap.innerHTML = `
-        <table class="tx-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Season/Wk</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>Team / Owner</th>
-                    <th>Added / Received</th>
-                    <th>Dropped</th>
-                    <th>Bid / FAAB</th>
-                    <th>Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${rowsHtml}
-            </tbody>
-        </table>
-    `;
-
-    resultsContainer.appendChild(wrap);
-}
-
-/**
- * Switches between 'cards' and 'table' view
- */
-function switchView(view) {
-    currentView = view;
-    document.getElementById('btnCardsView').classList.toggle('active', view === 'cards');
-    document.getElementById('btnTableView').classList.toggle('active', view === 'table');
-    renderResults();
-}
 
 /**
  * Resets all search filters back to default
